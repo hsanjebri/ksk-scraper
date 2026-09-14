@@ -1,21 +1,8 @@
 {
-  "version": 2,
-  "builds": [
-    {
-      "src": "dashboard/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dashboard/dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm --prefix dashboard ci",
+  "buildCommand": "npm --prefix dashboard run build",
+  "outputDirectory": "dashboard/dist",
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
