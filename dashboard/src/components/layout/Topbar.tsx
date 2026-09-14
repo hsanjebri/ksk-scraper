@@ -12,11 +12,15 @@ function ConnectionDot() {
   const lastUpdated = useRecords((s) => s.lastUpdated)
   useNow(1000) // re-render so "Xs ago" keeps counting
 
-  const tone = {
+  const TONES: Record<typeof connection, { dot: string; label: string }> = {
     live: { dot: 'bg-good', label: 'Live' },
     connecting: { dot: 'bg-warning', label: 'Connecting' },
     offline: { dot: 'bg-critical', label: 'Offline' },
-  }[connection]
+    // Never dressed up as "Live" — someone looking at this has to be able to
+    // tell at a glance that the numbers are generated, not from the factory.
+    demo: { dot: 'bg-warning', label: 'Demo data' },
+  }
+  const tone = TONES[connection]
 
   return (
     <div className="flex items-center gap-2 text-[0.6875rem] text-ink-muted">
@@ -27,6 +31,14 @@ function ConnectionDot() {
         <span className={clsx('relative inline-flex size-2 rounded-full', tone.dot)} />
       </span>
       <span className="font-medium text-ink-secondary">{tone.label}</span>
+      {connection === 'demo' && (
+        <span
+          className="rounded bg-warning/18 px-1.5 py-0.5 font-medium text-ink"
+          title="No backend reachable — these records are generated in the browser. The real scraper runs inside the SEBN network."
+        >
+          not connected to the factory
+        </span>
+      )}
       {lastUpdated && (
         <>
           <span aria-hidden>·</span>
