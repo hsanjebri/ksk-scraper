@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ksk_scraper
+    ports:
+      - '5433:5432'
+    volumes:
+      - ksk_scraper_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Inside the Docker network, Postgres is reached by service name on
+      # its container-internal port — these two override whatever's in
+      # .env (which is set up for running the app directly on the host).
+      DB_HOST: postgres
+      DB_PORT: 5432
+    ports:
+      - '3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  ksk_scraper_pgdata:

@@ -1,0 +1,298 @@
+@import 'tailwindcss';
+
+/*
+ * Design tokens.
+ *
+ * Colors come from the validated data-viz reference palette — the categorical
+ * series slots were run through scripts/validate_palette.js for BOTH modes
+ * (lightness band, chroma floor, CVD separation, normal-vision floor, contrast)
+ * before being used here. Do not hand-edit a series hex without re-validating:
+ * the slot ORDER is the colorblind-safety mechanism, not decoration.
+ *
+ * Light mode flags a sub-3:1 contrast warning on aqua/yellow/magenta, which
+ * obligates "relief" — every chart using them ships visible labels plus a
+ * table view. That's why ChartCard always has a table toggle.
+ */
+@theme {
+  --color-plane: #f9f9f7;
+  --color-surface: #fcfcfb;
+  --color-ink: #0b0b0b;
+  --color-ink-secondary: #52514e;
+  --color-ink-muted: #898781;
+  --color-grid: #e1e0d9;
+  --color-baseline: #c3c2b7;
+  --color-hairline: rgb(11 11 11 / 0.1);
+
+  /* Sidebar is dark in both modes (design direction). */
+  --color-rail: #1a1a19;
+  --color-rail-ink: #f4f4f1;
+  --color-rail-muted: #9d9c94;
+  --color-rail-hover: #26261f;
+
+  /* Categorical series slots — fixed order, never cycled. */
+  --color-s1: #2a78d6;
+  --color-s2: #eb6834;
+  --color-s3: #1baf7a;
+  --color-s4: #eda100;
+  --color-s5: #e87ba4;
+  --color-s6: #008300;
+
+  /* Status — reserved, never reused as a series color. */
+  --color-good: #0ca30c;
+  --color-warning: #fab219;
+  --color-serious: #ec835a;
+  --color-critical: #d03b3b;
+  --color-success-text: #006300;
+
+  --radius-card: 0.875rem;
+}
+
+/*
+ * Dark mode. Declared under both the OS media query and the [data-theme]
+ * stamp, with the toggle winning in both directions.
+ */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme='light'])) {
+      color-scheme: dark;
+      --color-plane: #0d0d0d;
+      --color-surface: #1a1a19;
+      --color-ink: #ffffff;
+      --color-ink-secondary: #c3c2b7;
+      --color-ink-muted: #898781;
+      --color-grid: #2c2c2a;
+      --color-baseline: #383835;
+      --color-hairline: rgb(255 255 255 / 0.1);
+      --color-rail: #0d0d0d;
+      --color-rail-ink: #f4f4f1;
+      --color-rail-muted: #898781;
+      --color-rail-hover: #1f1f1d;
+      --color-s1: #3987e5;
+      --color-s2: #d95926;
+      --color-s3: #199e70;
+      --color-s4: #c98500;
+      --color-s5: #d55181;
+      --color-s6: #008300;
+      --color-success-text: #0ca30c;
+    }
+  }
+
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --color-plane: #0d0d0d;
+    --color-surface: #1a1a19;
+    --color-ink: #ffffff;
+    --color-ink-secondary: #c3c2b7;
+    --color-ink-muted: #898781;
+    --color-grid: #2c2c2a;
+    --color-baseline: #383835;
+    --color-hairline: rgb(255 255 255 / 0.1);
+    --color-rail: #0d0d0d;
+    --color-rail-ink: #f4f4f1;
+    --color-rail-muted: #898781;
+    --color-rail-hover: #1f1f1d;
+    --color-s1: #3987e5;
+    --color-s2: #d95926;
+    --color-s3: #199e70;
+    --color-s4: #c98500;
+    --color-s5: #d55181;
+    --color-s6: #008300;
+    --color-success-text: #0ca30c;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--color-plane);
+    color: var(--color-ink);
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Numbers that align vertically (table cells, axis ticks) only. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /*
+   * Card depth is built from three stacked shadows rather than one: a hairline
+   * contact shadow, a short ambient, and a long diffuse. That's what separates
+   * "premium" from "a box with a drop shadow" — a single blurred shadow reads
+   * flat and muddy at any size.
+   */
+  .card {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-card);
+    box-shadow:
+      0 0 0 1px rgb(11 11 11 / 0.015),
+      0 1px 2px -1px rgb(11 11 11 / 0.06),
+      0 8px 24px -12px rgb(11 11 11 / 0.12);
+    transition:
+      box-shadow 220ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 220ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 220ms ease;
+  }
+
+  .card-interactive:hover {
+    transform: translateY(-1px);
+    border-color: color-mix(in oklab, var(--color-s1) 22%, var(--color-hairline));
+    box-shadow:
+      0 0 0 1px rgb(11 11 11 / 0.02),
+      0 2px 4px -2px rgb(11 11 11 / 0.08),
+      0 14px 34px -14px rgb(11 11 11 / 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme='light'])) .card {
+      box-shadow:
+        0 0 0 1px rgb(255 255 255 / 0.02),
+        0 1px 2px -1px rgb(0 0 0 / 0.5),
+        0 8px 24px -12px rgb(0 0 0 / 0.6);
+    }
+    :root:where(:not([data-theme='light'])) .card-interactive:hover {
+      box-shadow:
+        0 0 0 1px rgb(255 255 255 / 0.04),
+        0 2px 4px -2px rgb(0 0 0 / 0.55),
+        0 14px 34px -14px rgb(0 0 0 / 0.7);
+    }
+  }
+
+  :root[data-theme='dark'] .card {
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.02),
+      0 1px 2px -1px rgb(0 0 0 / 0.5),
+      0 8px 24px -12px rgb(0 0 0 / 0.6);
+  }
+  :root[data-theme='dark'] .card-interactive:hover {
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.04),
+      0 2px 4px -2px rgb(0 0 0 / 0.55),
+      0 14px 34px -14px rgb(0 0 0 / 0.7);
+  }
+
+  /* Hairline top highlight — catches light like a physical panel edge. */
+  .card-lift {
+    position: relative;
+  }
+  .card-lift::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    border-radius: var(--radius-card) var(--radius-card) 0 0;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in oklab, var(--color-ink) 8%, transparent),
+      transparent
+    );
+    pointer-events: none;
+  }
+}
+
+/* New row / updated row feedback when a WebSocket event lands. */
+@keyframes pulse-in {
+  0% {
+    background-color: color-mix(in oklab, var(--color-s1) 18%, transparent);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-pulse-in {
+  animation: pulse-in 2.4s ease-out;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background-color: color-mix(in oklab, var(--color-ink) 7%, transparent);
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--color-ink) 4%, transparent),
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+/* Staggered card entrance. Short on purpose — see Reveal.tsx. */
+@keyframes reveal-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.motion-reveal {
+  animation: reveal-rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Active nav item indicator. */
+@keyframes nav-mark {
+  from {
+    transform: scaleY(0.2);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.nav-active-mark {
+  animation: nav-mark 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/*
+ * One global stop for motion. Every animation in the app is listed here rather
+ * than relying on each component to remember — an animation that ignores this
+ * is a genuine accessibility defect, not a style preference.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-in,
+  .skeleton::after,
+  .motion-reveal,
+  .nav-active-mark {
+    animation: none;
+  }
+  .card,
+  .card-interactive:hover {
+    transition: none;
+    transform: none;
+  }
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+  }
+}
