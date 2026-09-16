@@ -12,7 +12,8 @@ import { isoWeekLabel } from './metrics'
  */
 
 const MODELS = ['MAM', 'MCM']
-const ZSB = ['ZSB-100', 'ZSB-110', 'ZSB-204', 'ZSB-317', 'ZSB-402', 'ZSB-509']
+// ZSB is no longer drawn from a pool — it is derived from the CarID, the way
+// the real system does it. See zsbFor().
 const COLORS = ['Black', 'White', 'Grey', 'Red', 'Blue', 'Silver']
 const SHIFTS = ['1', '2', '3']
 const OPERATORS = ['J. Kowalski', 'A. Nowak', 'M. Wisniewski', 'P. Zielinski', 'K. Wojcik']
@@ -45,21 +46,26 @@ const PARTS: { type: string; names: string[] }[] = [
 ]
 
 /** Skewed on purpose — a flat distribution makes the Pareto chart pointless. */
-// Real codes and real frequencies, from a capture of the live results page —
-// bare numbers, with 151/153/140 dominating.
+// MEASURED shares from a real capture of the live results page (44 rows).
+// Kept in step with the backend mock so the public demo and the local mock
+// tell the same story.
 const WEIGHTED_CODES: { code: string; weight: number }[] = [
-  { code: '151', weight: 30 },
-  { code: '153', weight: 22 },
-  { code: '140', weight: 20 },
-  { code: '152', weight: 14 },
-  { code: '520', weight: 13 },
-  { code: '510', weight: 10 },
-  { code: '160', weight: 9 },
-  { code: '150', weight: 5 },
-  { code: '500', weight: 4 },
-  { code: '40', weight: 4 },
+  { code: '151', weight: 21 },
+  { code: '140', weight: 14 },
+  { code: '153', weight: 14 },
+  { code: '160', weight: 7 },
+  { code: '510', weight: 7 },
+  { code: '520', weight: 7 },
+  { code: '40', weight: 5 },
+  { code: '152', weight: 5 },
+  { code: '500', weight: 5 },
+  { code: '110', weight: 2 },
+  { code: '120', weight: 2 },
   { code: '141', weight: 2 },
-  { code: '120', weight: 1 },
+  { code: '150', weight: 2 },
+  { code: '154', weight: 2 },
+  { code: '170', weight: 2 },
+  { code: '181', weight: 2 },
 ]
 const WEIGHT_TOTAL = WEIGHTED_CODES.reduce((sum, c) => sum + c.weight, 0)
 
@@ -86,13 +92,23 @@ const HISTORY_HOURS = 12 * 7 * 24
 let nextId = 1
 const seenCars = new Map<string, string[]>()
 
+/**
+ * Real CarIDs are `006304952C` — nine digits plus a letter, no model prefix —
+ * and repeats run at about 5%, not the 22% this used to invent.
+ */
 function carIdFor(model: string): string {
   const seen = seenCars.get(model) ?? []
-  if (seen.length > 5 && Math.random() < 0.22) return pick(seen)
-  const carId = `${model}-${randomInt(10000, 99999)}`
+  if (seen.length > 5 && Math.random() < 0.05) return pick(seen)
+  const carId = `00630${randomInt(1000, 5999)}C`
   seen.push(carId)
   seenCars.set(model, seen)
   return carId
+}
+
+/** ZSB is the CarID plus a revision suffix — 40 of 41 real rows follow this. */
+function zsbFor(carId: string): string {
+  const roll = Math.random()
+  return `${carId}${roll < 0.85 ? '00' : roll < 0.97 ? '01' : '02'}`
 }
 
 function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): KskRecord {
@@ -107,6 +123,8 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
   const part = randomPart()
   const defectShift = pick(SHIFTS)
   const id = nextId++
+  // Hoisted because ZSB is derived from it — see zsbFor().
+  const carId = carIdFor(model)
 
   const errorCodes: ErrorCodeEntry[] = Array.from({ length: randomInt(1, 3) }, (_, i) => {
     const entryPart = randomPart()
@@ -127,8 +145,8 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
     id,
     no: String(100_000 + id),
     model,
-    carId: carIdFor(model),
-    zsb: pick(ZSB),
+    carId,
+    zsb: zsbFor(carId),
     registered: registered.toISOString(),
     reworked: reworked ? reworked.toISOString() : null,
     qualityControlDate: reworked

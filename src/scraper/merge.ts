@@ -14,6 +14,21 @@ function preferList(listValue: string, detailValue: string | null | undefined): 
 }
 
 /**
+ * Comment is the one field where the list is NOT the better source.
+ *
+ * Measured against a real capture: 28 of 44 rows carry a comment of exactly
+ * 60 characters — the list page clips it. The detail page holds the full
+ * sentence. Applying the usual "list wins" rule to this field would store the
+ * truncated text forever, losing the end of two thirds of all defect
+ * descriptions. So here the longer of the two wins.
+ */
+function preferLonger(listValue: string, detailValue: string | null | undefined): string {
+  const fromDetail = detailValue ?? '';
+  if (!listValue.trim()) return fromDetail;
+  return fromDetail.length > listValue.length ? fromDetail : listValue;
+}
+
+/**
  * The list row is AUTHORITATIVE; the detail page only enriches it.
  *
  * Why this asymmetry matters: the list parser is verified against real bytes
@@ -41,7 +56,8 @@ export function mergeListAndDetail(
     carId: preferList(row.carId, detail?.carId),
     zsb: preferList(row.zsb, detail?.zsb),
     errorCode: preferList(row.errorCode, detail?.errorCode),
-    comment: preferList(row.comment, detail?.comment),
+    // Not preferList: the list truncates this field — see preferLonger.
+    comment: preferLonger(row.comment, detail?.comment),
     color: preferList(row.color, detail?.color),
 
     // --- from the DETAIL: enrichment only, absent until it parses ---

@@ -135,4 +135,37 @@ describe('mergeListAndDetail', () => {
       expect(merged.errorCode).toBe('500');
     });
   });
+
+  // The list page clips Comment at 60 characters — measured on a real capture,
+  // where 28 of 44 rows sat at exactly 60. The full text is on the detail page.
+  describe('comment truncation', () => {
+    const clipped = 'pas de continuite n30/3*1-b-v4 voie21 x18/53*5-s-v1 voie4 lt'; // 60
+    const full =
+      'pas de continuite n30/3*1-b-v4 voie21 x18/53*5-s-v1 voie4 ltg 2482380 remplace';
+
+    it('is exactly the 60 characters the real page truncates to', () => {
+      expect(clipped).toHaveLength(60);
+    });
+
+    it('takes the fuller comment from the detail page', () => {
+      const merged = mergeListAndDetail(
+        { ...LIST_ROW, comment: clipped },
+        { ...EMPTY_DETAIL, comment: full },
+      );
+      expect(merged.comment).toBe(full);
+    });
+
+    it('keeps the list comment when the detail page has nothing', () => {
+      const merged = mergeListAndDetail({ ...LIST_ROW, comment: clipped }, EMPTY_DETAIL);
+      expect(merged.comment).toBe(clipped);
+    });
+
+    it('never replaces a longer list comment with a shorter detail one', () => {
+      const merged = mergeListAndDetail(
+        { ...LIST_ROW, comment: full },
+        { ...EMPTY_DETAIL, comment: 'short' },
+      );
+      expect(merged.comment).toBe(full);
+    });
+  });
 });

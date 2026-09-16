@@ -40,7 +40,8 @@ export interface RemoteDetailRecord extends RemoteListRow {
   errorCodes: RemoteErrorCodeRow[];
 }
 
-const ZSB_POOL = ['ZSB-100', 'ZSB-110', 'ZSB-204', 'ZSB-317', 'ZSB-402', 'ZSB-509'];
+// ZSB is no longer drawn from a pool — it is derived from the CarID, the way
+// the real system does it. See zsbFor().
 const COLOR_POOL = ['Black', 'White', 'Grey', 'Red', 'Blue', 'Silver'];
 const SHIFT_POOL = ['1', '2', '3'];
 const OPERATOR_POOL = ['J. Kowalski', 'A. Nowak', 'M. Wisniewski', 'P. Zielinski', 'K. Wojcik'];
@@ -65,22 +66,27 @@ const PARTS: { type: string; names: string[] }[] = [
  * the same count and the "vital few" reads as "5 of 6 codes", which tells
  * nobody anything. These weights give a realistic long tail.
  */
-// Codes and their relative frequency are taken from a real capture of the
-// site's results page: they are bare numbers, not "E-123" identifiers, and
-// 151/153/140 dominate exactly like this.
+// MEASURED from a real capture of the site's results page (44 rows), not
+// guessed: the codes are bare numbers and these are their observed shares.
+// The real tail is flatter than a textbook Pareto — 9 of 16 codes account for
+// 80% of defects — so the mock should not look steeper than reality.
 const WEIGHTED_ERROR_CODES: { code: string; weight: number }[] = [
-  { code: '151', weight: 30 },
-  { code: '153', weight: 22 },
-  { code: '140', weight: 20 },
-  { code: '152', weight: 14 },
-  { code: '520', weight: 13 },
-  { code: '510', weight: 10 },
-  { code: '160', weight: 9 },
-  { code: '150', weight: 5 },
-  { code: '500', weight: 4 },
-  { code: '40', weight: 4 },
+  { code: '151', weight: 21 },
+  { code: '140', weight: 14 },
+  { code: '153', weight: 14 },
+  { code: '160', weight: 7 },
+  { code: '510', weight: 7 },
+  { code: '520', weight: 7 },
+  { code: '40', weight: 5 },
+  { code: '152', weight: 5 },
+  { code: '500', weight: 5 },
+  { code: '110', weight: 2 },
+  { code: '120', weight: 2 },
   { code: '141', weight: 2 },
-  { code: '120', weight: 1 },
+  { code: '150', weight: 2 },
+  { code: '154', weight: 2 },
+  { code: '170', weight: 2 },
+  { code: '181', weight: 2 },
 ];
 const ERROR_WEIGHT_TOTAL = WEIGHTED_ERROR_CODES.reduce((sum, e) => sum + e.weight, 0);
 
@@ -135,17 +141,35 @@ const QUALITY_GATE_POOL = [
  * to produce some or the "repeat" detection can never be seen working.
  */
 const seenCarIds = new Map<KskModel, string[]>();
-const CAR_REPEAT_CHANCE = 0.22;
+// Measured: 2 repeats among 41 distinct CarIDs over a 9-day window (~5%).
+// The previous 22% made repeat-defect analysis look far more dramatic than
+// the real data supports.
+const CAR_REPEAT_CHANCE = 0.05;
 
+/**
+ * Real CarIDs look like `006304952C` — nine digits and a trailing letter, with
+ * no model prefix. The model lives in its own column. Inventing `MAM-77527`
+ * made every table and export look unlike the system it is standing in for.
+ */
 function randomCarId(model: KskModel): string {
   const seen = seenCarIds.get(model) ?? [];
   if (seen.length > 5 && Math.random() < CAR_REPEAT_CHANCE) {
     return pickRandom(seen);
   }
-  const carId = `${model}-${randomInt(10000, 99999)}`;
+  const carId = `00630${randomInt(1000, 5999)}C`;
   seen.push(carId);
   seenCarIds.set(model, seen);
   return carId;
+}
+
+/**
+ * ZSB is the CarID plus a two-digit revision suffix — measured on 40 of 41
+ * real rows. Suffix `00` dominates, with `01`/`02` for reworked revisions.
+ */
+function zsbFor(carId: string): string {
+  const roll = Math.random();
+  const suffix = roll < 0.85 ? '00' : roll < 0.97 ? '01' : '02';
+  return `${carId}${suffix}`;
 }
 
 function hoursAgo(date: Date): number {
@@ -197,12 +221,13 @@ export function generateRandomDetailRecord(
 
   const part = randomPart();
   const defectShift = pickRandom(SHIFT_POOL);
+  const carId = randomCarId(model);
 
   return {
     no,
     model,
-    carId: randomCarId(model),
-    zsb: pickRandom(ZSB_POOL),
+    carId,
+    zsb: zsbFor(carId),
     registered: registered.toISOString(),
     errorCode: weightedErrorCode(),
     comment: pickRandom(COMMENT_POOL),
