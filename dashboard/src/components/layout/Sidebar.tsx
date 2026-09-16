@@ -22,11 +22,11 @@ const ICONS: Record<string, string> = {
 export const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Overview', icon: 'overview', ready: true },
   { to: '/rework', label: 'Rework analysis', icon: 'rework', ready: true },
-  { to: '/defects', label: 'Defects analysis', icon: 'defects' },
+  { to: '/defects', label: 'Defects analysis', icon: 'defects', ready: true },
   { to: '/pareto', label: 'Top 10 / Pareto', icon: 'pareto', ready: true },
-  { to: '/trends', label: 'Trends', icon: 'trends' },
+  { to: '/trends', label: 'Trends', icon: 'trends', ready: true },
   { to: '/kpi', label: 'KPI', icon: 'kpi' },
-  { to: '/reports', label: 'Reports', icon: 'reports' },
+  { to: '/reports', label: 'Reports', icon: 'reports', ready: true },
 ]
 
 function NavIcon({ path }: { path: string }) {

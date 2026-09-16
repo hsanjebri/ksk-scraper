@@ -53,10 +53,17 @@ export function Shell() {
   const disconnect = useRecords((s) => s.disconnect)
 
   useEffect(() => {
-    void load()
-    connect()
+    let cancelled = false
+    // connect() must run AFTER load() resolves: load() is what discovers
+    // whether a backend exists, and connect() branches on that. Firing them
+    // together opened a socket to a dead host and let its error handler
+    // overwrite the demo state.
+    void load().then(() => {
+      if (!cancelled) connect()
+    })
     const unwatch = watchSystemTheme()
     return () => {
+      cancelled = true
       disconnect()
       unwatch()
     }

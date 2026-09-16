@@ -22,6 +22,12 @@ export interface VizTokens {
   baseline: string
   series: string[]
   neutral: string
+  /**
+   * Single-hue ramp for MAGNITUDE (the heatmap), light -> dark. One hue only:
+   * a rainbow ramp has no perceptual order, so readers cannot tell which end
+   * is "more" without consulting the legend every time.
+   */
+  sequential: string[]
   status: {
     good: string
     warning: string
@@ -48,6 +54,9 @@ export const LIGHT_TOKENS: VizTokens = {
   baseline: '#c3c2b7',
   series: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300'],
   neutral: '#c3c2b7',
+  // Blue 100 -> 650. The lightest step is allowed to recede toward the surface
+  // because on a sequential scale "nearly invisible" correctly means "near zero".
+  sequential: ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#2a78d6', '#1c5cab', '#104281'],
   status: STATUS,
   tooltipBg: '#ffffff',
   tooltipBorder: 'rgba(11,11,11,0.10)',
@@ -62,6 +71,9 @@ export const DARK_TOKENS: VizTokens = {
   baseline: '#383835',
   series: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'],
   neutral: '#52514e',
+  // Reversed for the dark surface: low values sit close to the background and
+  // high values are the light end, so "more" still reads as "stands out".
+  sequential: ['#0d366b', '#104281', '#1c5cab', '#2a78d6', '#3987e5', '#6da7ec', '#9ec5f4'],
   status: STATUS,
   tooltipBg: '#232322',
   tooltipBorder: 'rgba(255,255,255,0.12)',

@@ -6,7 +6,7 @@
  * Add a chart type here when a new page needs one — e.g. HeatmapChart for the
  * defect heatmap, TreemapChart for the part breakdown.
  */
-import { BarChart, LineChart, PieChart } from 'echarts/charts'
+import { BarChart, HeatmapChart, LineChart, PieChart } from 'echarts/charts'
 import {
   AxisPointerComponent,
   GridComponent,
@@ -14,6 +14,7 @@ import {
   MarkLineComponent,
   MarkPointComponent,
   TooltipComponent,
+  VisualMapComponent,
 } from 'echarts/components'
 import * as echarts from 'echarts/core'
 import { SVGRenderer } from 'echarts/renderers'
@@ -24,6 +25,13 @@ echarts.use([
   BarChart,
   LineChart,
   PieChart,
+  HeatmapChart,
+  // HeatmapChart hard-requires VisualMapComponent on category axes — it throws
+  // "Heatmap must use with visualMap" at render time even when every cell
+  // carries its own itemStyle colour. The heatmap hides the control and feeds
+  // it our own validated ramp, so registering it costs the bundle a little but
+  // is not optional.
+  VisualMapComponent,
   GridComponent,
   TooltipComponent,
   LegendComponent,

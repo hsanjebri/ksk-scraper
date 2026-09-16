@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "scrape:probe": "nest build && node dist/scraper/live/probe.js",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
@@ -29,7 +30,9 @@
     "@nestjs/typeorm": "^12.0.1",
     "@nestjs/websockets": "^10.4.22",
     "axios": "^1.20.0",
+    "better-sqlite3": "^12.11.1",
     "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2",
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1",
@@ -75,5 +78,8 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node"
+  },
+  "optionalDependencies": {
+    "sqlite3": "^6.0.1"
   }
 }

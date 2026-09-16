@@ -18,3 +18,9 @@ dashboard/dist/
 Thumbs.db
 .vscode/
 .idea/
+
+# Local data & scraping assets
+files/
+extracted data and frommohamed conv/
+*.sqlite
+*.db

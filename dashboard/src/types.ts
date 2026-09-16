@@ -38,6 +38,8 @@ export interface KskRecord {
   description: string | null
   comment: string | null
   color: string | null
+  /** Station where the defect was caught — drives the Quality Gate breakdown. */
+  qualityGate: string | null
   errorCodes: ErrorCodeEntry[]
   status: KskStatus
   week: string

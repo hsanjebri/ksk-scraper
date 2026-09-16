@@ -1,4 +1,5 @@
 import { Column, Entity, PrimaryColumn } from 'typeorm';
+import { DATE_COLUMN_TYPE } from '../../database.config';
 import { KskModel } from '../constants';
 
 /**
@@ -14,6 +15,6 @@ export class ScrapeState {
   @Column({ name: 'last_seen_no', nullable: true })
   lastSeenNo: string | null;
 
-  @Column({ name: 'updated_at', type: 'timestamptz' })
+  @Column({ name: 'updated_at', type: DATE_COLUMN_TYPE })
   updatedAt: Date;
 }

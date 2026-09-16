@@ -7,6 +7,7 @@ import {
   PrimaryGeneratedColumn,
   Unique,
 } from 'typeorm';
+import { DATE_COLUMN_TYPE } from '../../database.config';
 import { KskModel } from '../constants';
 import { getIsoWeekLabel } from '../util/iso-week.util';
 import { ErrorCodeEntry } from './error-code.entity';
@@ -44,14 +45,14 @@ export class KskRecord {
   @Column()
   zsb: string;
 
-  @Column({ type: 'timestamptz' })
+  @Column({ type: DATE_COLUMN_TYPE })
   registered: Date;
 
   /** Null while the rework is still in progress. */
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({ type: DATE_COLUMN_TYPE, nullable: true })
   reworked: Date | null;
 
-  @Column({ name: 'quality_control_date', type: 'timestamptz', nullable: true })
+  @Column({ name: 'quality_control_date', type: DATE_COLUMN_TYPE, nullable: true })
   qualityControlDate: Date | null;
 
   @Column({ name: 'defect_shift', nullable: true })
@@ -81,6 +82,14 @@ export class KskRecord {
   /** Color swatch shown on the list page. */
   @Column({ nullable: true })
   color: string | null;
+
+  /**
+   * Station where the defect was caught ("Reworked From" on the detail page).
+   * Only the live scraper can populate this reliably; it drives the
+   * "Reworked From — Quality Gate" breakdown.
+   */
+  @Column({ name: 'quality_gate', nullable: true })
+  qualityGate: string | null;
 
   @OneToMany(() => ErrorCodeEntry, (entry) => entry.kskRecord, {
     cascade: true,

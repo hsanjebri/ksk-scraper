@@ -31,6 +31,12 @@ export interface RemoteDetailRecord extends RemoteListRow {
   partType: string;
   partName: string;
   description: string;
+  /**
+   * Where the defect was caught ("Reworked From" on the detail page). Optional
+   * because the mock predates it and the live detail parser is the only source
+   * that can populate it reliably.
+   */
+  qualityGate?: string | null;
   errorCodes: RemoteErrorCodeRow[];
 }
 
@@ -59,15 +65,22 @@ const PARTS: { type: string; names: string[] }[] = [
  * the same count and the "vital few" reads as "5 of 6 codes", which tells
  * nobody anything. These weights give a realistic long tail.
  */
+// Codes and their relative frequency are taken from a real capture of the
+// site's results page: they are bare numbers, not "E-123" identifiers, and
+// 151/153/140 dominate exactly like this.
 const WEIGHTED_ERROR_CODES: { code: string; weight: number }[] = [
-  { code: 'E-101', weight: 34 },
-  { code: 'E-402', weight: 25 },
-  { code: 'E-317', weight: 16 },
-  { code: 'E-611', weight: 10 },
-  { code: 'E-509', weight: 7 },
-  { code: 'E-204', weight: 4 },
-  { code: 'E-733', weight: 2 },
-  { code: 'E-845', weight: 2 },
+  { code: '151', weight: 30 },
+  { code: '153', weight: 22 },
+  { code: '140', weight: 20 },
+  { code: '152', weight: 14 },
+  { code: '520', weight: 13 },
+  { code: '510', weight: 10 },
+  { code: '160', weight: 9 },
+  { code: '150', weight: 5 },
+  { code: '500', weight: 4 },
+  { code: '40', weight: 4 },
+  { code: '141', weight: 2 },
+  { code: '120', weight: 1 },
 ];
 const ERROR_WEIGHT_TOTAL = WEIGHTED_ERROR_CODES.reduce((sum, e) => sum + e.weight, 0);
 
@@ -101,6 +114,19 @@ const DESCRIPTION_POOL = [
   'Loose crimp connection on terminal.',
 ];
 const INFO_POOL = ['Repeat defect', 'First occurrence', 'Known issue #4471', ''];
+
+/**
+ * Quality gates — the station where the defect was caught. Taken from the
+ * production relay's "Reworked From - Quality Gate" breakdown so the mock
+ * exercises the same chart the real data will.
+ */
+const QUALITY_GATE_POOL = [
+  'EOL Test',
+  'Visual Inspection',
+  'Electrical Test',
+  'Final Audit',
+  'Customer Line',
+];
 
 /**
  * Cars already seen per model, so a minority of records reuse an existing
@@ -192,6 +218,7 @@ export function generateRandomDetailRecord(
     partType: part.type,
     partName: part.name,
     description: pickRandom(DESCRIPTION_POOL),
+    qualityGate: pickRandom(QUALITY_GATE_POOL),
     errorCodes: randomErrorCodes(),
   };
 }

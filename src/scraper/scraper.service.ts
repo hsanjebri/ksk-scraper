@@ -5,7 +5,8 @@ import { KskModel } from './constants';
 import { ErrorCodeEntry } from './entities/error-code.entity';
 import { KskRecord } from './entities/ksk-record.entity';
 import { ScrapeState } from './entities/scrape-state.entity';
-import { RemoteDetailRecord } from './mock/mock-data.generator';
+import { mergeListAndDetail } from './merge';
+import { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
 import { REMOTE_SOURCE, RemoteSource } from './remote-source.interface';
 
 @Injectable()
@@ -22,37 +23,38 @@ export class ScraperService {
   ) {}
 
   /**
-   * Fetches the current list page for `model` and returns the No. values
-   * that are newer than the last one we've recorded in ScrapeState, oldest
-   * first. Does NOT advance ScrapeState — the caller must call `markSeen()`
-   * only after a No. has actually been persisted, so a failed save (network
-   * hiccup, etc.) gets retried on the next tick instead of being silently
-   * dropped.
+   * Fetches the current list page for `model` and returns the FULL ROWS that
+   * are newer than the last one recorded in ScrapeState, oldest first.
    *
-   * TODO(real-scraper): the only thing that changes here for production is
-   * inside `fetchListRows()` below — everything after that call (the diff
-   * against ScrapeState) stays the same.
+   * Returning whole rows rather than just No. values is deliberate: the list
+   * parser is verified against real server bytes, so its data is the most
+   * trustworthy thing we have. Discarding it and rebuilding the record from
+   * the (unverified) detail page is how good data gets overwritten with blanks.
+   *
+   * Does NOT advance ScrapeState — the caller calls `markSeen()` only once a
+   * record is actually persisted, so a failed save is retried next tick
+   * instead of being silently skipped.
    */
-  async fastScan(model: KskModel): Promise<string[]> {
+  async fastScan(model: KskModel): Promise<RemoteListRow[]> {
     const rows = await this.fetchListRows(model);
     if (rows.length === 0) return [];
-
-    // The real page lists newest-first, same as the mock source.
-    const newestNo = rows[0].no;
 
     const state = await this.scrapeStateRepo.findOne({ where: { model } });
     const lastSeenNo = state?.lastSeenNo ?? null;
 
-    const newNos = lastSeenNo === null
-      ? [newestNo] // first run for this model: only take the newest, not the whole backlog
-      : rows.filter((row) => compareNo(row.no, lastSeenNo) > 0).map((row) => row.no);
+    // The real page lists newest-first, so on a first run rows[0] is the
+    // newest; we take only that rather than ingesting the whole backlog.
+    const newRows =
+      lastSeenNo === null
+        ? rows.slice(0, 1)
+        : rows.filter((row) => compareNo(row.no, lastSeenNo) > 0);
 
-    newNos.sort(compareNo);
+    newRows.sort((a, b) => compareNo(a.no, b.no));
 
-    if (newNos.length > 0) {
-      this.logger.log(`fastScan(${model}): found ${newNos.length} new record(s)`);
+    if (newRows.length > 0) {
+      this.logger.log(`fastScan(${model}): found ${newRows.length} new record(s)`);
     }
-    return newNos;
+    return newRows;
   }
 
   /** Records that `no` (and everything before it) has been handled for `model`. */
@@ -61,13 +63,17 @@ export class ScraperService {
   }
 
   /**
-   * Fetches and parses a single detail page into a ready-to-save KskRecord
-   * (with its error-code sub-rows attached). Does NOT save it — callers
-   * decide when/whether to persist.
+   * Raw detail-page record, straight from the source. May come back almost
+   * empty if the detail parser doesn't match the real markup — callers must
+   * treat it as enrichment, never as the record itself.
    */
-  async fetchDetail(no: string, model: KskModel): Promise<KskRecord> {
-    const remote = await this.fetchDetailPage(no, model);
-    return this.mapRemoteToEntity(remote);
+  async fetchDetailRaw(no: string, model: KskModel): Promise<RemoteDetailRecord> {
+    return this.fetchDetailPage(no, model);
+  }
+
+  /** Combines a verified list row with optional detail enrichment, ready to save. */
+  buildRecord(row: RemoteListRow, detail: RemoteDetailRecord | null): KskRecord {
+    return this.mapRemoteToEntity(mergeListAndDetail(row, detail));
   }
 
   /**
@@ -112,6 +118,7 @@ export class ScraperService {
     record.description = remote.description;
     record.comment = remote.comment;
     record.color = remote.color;
+    record.qualityGate = remote.qualityGate ?? null;
     record.errorCodes = remote.errorCodes.map((entry) => {
       const errorCode = new ErrorCodeEntry();
       errorCode.code = entry.code;

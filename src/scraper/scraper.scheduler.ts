@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
 import { FAST_SCAN_INTERVAL_MS, KSK_MODELS, WATCHLIST_RECHECK_INTERVAL_MS } from './constants';
 import { KskRecord } from './entities/ksk-record.entity';
+import { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
 import { ScraperGateway } from './scraper.gateway';
 import { ScraperService } from './scraper.service';
 
@@ -19,38 +20,55 @@ export class ScraperScheduler {
   ) {}
 
   /**
-   * Fast scan: for each model, check the list page's newest No. against
-   * what we've already seen, and pull full details for anything new.
+   * Fast scan: for each model, diff the list page against what we've already
+   * seen and ingest anything new.
    *
-   * Processes No.s oldest-first and only advances ScrapeState after each
-   * one is actually persisted. If one fails (network hiccup, parse error),
-   * we stop for that model this tick instead of skipping ahead — it (and
-   * anything after it) gets retried on the next tick rather than lost.
+   * Processes oldest-first and only advances ScrapeState once a record is
+   * actually persisted. If one fails, we stop for that model this tick rather
+   * than skipping past it — it gets retried next time instead of being lost.
    */
   @Interval(FAST_SCAN_INTERVAL_MS)
   async handleFastScan(): Promise<void> {
     for (const model of KSK_MODELS) {
-      let newNos: string[];
+      let newRows: RemoteListRow[];
       try {
-        newNos = await this.scraperService.fastScan(model);
+        newRows = await this.scraperService.fastScan(model);
       } catch (err) {
         this.logger.error(`fastScan failed for model=${model}`, err instanceof Error ? err.stack : err);
         continue;
       }
 
-      for (const no of newNos) {
+      for (const row of newRows) {
         try {
-          const alreadyStored = await this.recordRepo.exists({ where: { no, model } });
+          const alreadyStored = await this.recordRepo.exists({
+            where: { no: row.no, model },
+          });
+
           if (!alreadyStored) {
-            const record = await this.scraperService.fetchDetail(no, model);
+            // The detail page is enrichment, not the record. A failure here
+            // must not cost us the row — the list data is already verified
+            // and is worth saving on its own.
+            let detail: RemoteDetailRecord | null = null;
+            try {
+              detail = await this.scraperService.fetchDetailRaw(row.no, model);
+            } catch (err) {
+              this.logger.warn(
+                `detail fetch failed for ${model} #${row.no} (${
+                  err instanceof Error ? err.message : err
+                }) — saving list data only; the watch-list recheck will fill it in`,
+              );
+            }
+
+            const record = this.scraperService.buildRecord(row, detail);
             const saved = await this.recordRepo.save(record);
             saved.computeDerived();
             this.gateway.emitNewRecord(saved);
           }
-          await this.scraperService.markSeen(model, no);
+
+          await this.scraperService.markSeen(model, row.no);
         } catch (err) {
           this.logger.error(
-            `failed to process ${model} #${no} — will retry next tick`,
+            `failed to process ${model} #${row.no} — will retry next tick`,
             err instanceof Error ? err.stack : err,
           );
           break; // don't skip ahead past a failed No. — retry it (and anything after) next tick
@@ -62,6 +80,9 @@ export class ScraperScheduler {
   /**
    * Watch-list recheck: re-fetch the detail page for every record still
    * "En cours" and see whether it has since been closed out.
+   *
+   * This is also the second chance for records whose detail fetch failed when
+   * they were first ingested — they stay open, so they stay on this list.
    */
   @Interval(WATCHLIST_RECHECK_INTERVAL_MS)
   async handleWatchlistRecheck(): Promise<void> {
@@ -70,11 +91,25 @@ export class ScraperScheduler {
 
     for (const existing of openRecords) {
       try {
-        const fresh = await this.scraperService.fetchDetail(existing.no, existing.model);
-        if (!fresh.reworked) continue; // still open, nothing to do
+        const fresh = await this.scraperService.fetchDetailRaw(existing.no, existing.model);
 
-        existing.reworked = fresh.reworked;
-        existing.qualityControlDate = fresh.qualityControlDate;
+        // Fill in detail-only fields that may have been missing at ingest —
+        // but never touch `registered`, which came from the verified list row.
+        existing.qualityGate = existing.qualityGate ?? fresh.qualityGate ?? null;
+        existing.defectShift = existing.defectShift ?? fresh.defectShift;
+        existing.detectShift = existing.detectShift ?? fresh.detectShift;
+        existing.defectBy = existing.defectBy ?? fresh.defectBy;
+
+        if (!fresh.reworked) {
+          // Still open. Persist any enrichment we just picked up, quietly.
+          await this.recordRepo.save(existing);
+          continue;
+        }
+
+        existing.reworked = new Date(fresh.reworked);
+        existing.qualityControlDate = fresh.qualityControlDate
+          ? new Date(fresh.qualityControlDate)
+          : null;
         existing.computeDerived();
 
         const saved = await this.recordRepo.save(existing);
