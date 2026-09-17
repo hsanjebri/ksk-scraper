@@ -1,4 +1,12 @@
+<p align="center">
+  <img src="dashboard/public/sebn-mercedes-banner.png" alt="SEBN TN03 | Mercedes-Benz" width="480" />
+</p>
+
 # SEBN TN3 — Rework Quality Dashboard
+
+<p align="center">
+  <img src="dashboard/public/rework-banner.png" alt="Rework Analysis — SEBN TN03 Mercedes Project" width="720" />
+</p>
 
 Live quality dashboard for the SEBN TN3 rework zone (Mercedes-Benz programme).
 
@@ -20,13 +28,14 @@ imitates the real one:
 
 | Check | Result |
 | --- | --- |
-| Unit tests | 96 passing |
+| Unit tests | 113 passing (9 test suites) |
 | Full history sync, live mode, 5,939 real records | 107 s, 0 failures |
 | Real record MCM #3059 (closed) | every field matches the site, incl. 7 min and week 2026-W38 |
 | Real record MAM #2944 (open) | every field matches the site |
 | Accented French comments, undeclared charset | 260 accented comments, 0 corrupted |
 | New record on the site → `record.new` on the dashboard | 3.5 s |
 | Repair → quality control → `record.closed` / `record.updated` | pushed, once each |
+| Live cloud bridge | Outbound HTTPS push from plant PC to Railway + Vercel |
 
 Not yet proven: detail-page layouts other than the two captured ones (see
 [Known limits](#known-limits)).
@@ -93,6 +102,82 @@ The dashboard reads the backend through `VITE_API_URL`; for another PC on the
 same network, point it at `http://<this-pc>:3000`.
 
 ---
+
+## Hosting it online while the data stays inside the plant
+
+The rework server has no route from the internet, so a cloud server can never
+reach it. The bridge works the other way round: a script on a PC **inside** the
+plant reads the pages and pushes them out.
+
+```
+SEBN network (a plant PC)                     Internet
+┌───────────────────────────────┐          ┌────────────────────────────┐
+│ rework.jenapp0001.sebn.com    │          │ Railway: this backend      │
+│          ▲ reads pages        │          │  SCRAPER_MODE=relay        │
+│          │                    │  HTTPS   │  + PostgreSQL              │
+│ live-sync.bat (PowerShell) ───┼─────────►│  POST /api/scraper/ingest  │
+│  double-click, leave open     │  pushes  │            │ WebSocket     │
+└───────────────────────────────┘          │ Vercel: dashboard ◄────────┘
+                                           └────────────────────────────┘
+```
+
+The agent is deliberately dumb: it posts the **raw bytes** of each page and
+asks what to fetch next. All parsing, merging, charset detection and
+throttling stay on the server, in the code tested against the captured pages —
+so the cloud deployment and a direct local one cannot drift apart.
+
+**On the server (Railway):**
+
+```ini
+SCRAPER_MODE=relay
+SYNC_SECRET=<a long random string>
+# DATABASE_URL is injected by the Postgres plugin; TLS is handled automatically
+```
+
+Generate the secret with
+`node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`.
+
+**On the plant PC:** send `live-sync.zip` (in the repo root). Mohamed puts the
+same secret in `live-sync.bat`, double-clicks it, and leaves the window open.
+Nothing is installed, no admin rights, outbound HTTPS only — nothing inside the
+network is exposed.
+
+**Loading the real history first,** so the dashboard is not empty before the
+agent has run:
+
+```bash
+npm run seed:captured            # reads ./captured/captured into the configured DB
+```
+
+Point `.env` at the cloud database (`DATABASE_URL=...`, `DB_TYPE=postgres`) to
+seed Railway from your laptop. It goes through the same ingest path the agent
+uses. Records without a detail page stay hidden until the agent fetches them —
+the first run takes 20–30 minutes for ~6,000 records, so **start the agent well
+before any demo**.
+
+**Deployment checklist**
+
+1. Railway → Variables: `SCRAPER_MODE=relay`, `SYNC_SECRET=<random>`. Leaving
+   `SCRAPER_MODE` unset means **mock**, and the server seeds fake records into
+   the database on first boot.
+2. If that already happened, clear them before real data arrives:
+   `npm run db:clear-mock` (counts them) then `npm run db:clear-mock -- --yes`.
+   The server also logs a loud warning at startup when a live or relay database
+   still holds mock-looking records.
+3. Vercel → `VITE_API_URL=https://<your-app>.up.railway.app`, then redeploy.
+4. `npm run seed:captured` against the cloud database for the real history.
+5. Send `live-sync.zip` to the plant PC and have the agent started.
+6. Check `GET /records/status`: `mode: "relay"`, an `agent` block with a recent
+   `lastSeenAt`, and `counts.pending` falling.
+
+Security notes worth keeping in mind:
+
+- The ingest endpoints **write** the data the dashboard reports and sit on a
+  public URL. They fail closed: with no `SYNC_SECRET` set, every push is
+  rejected, and requests are refused unless the secret matches exactly.
+- Real plant data (CarIDs, defect comments, team names) leaves the SEBN
+  network to a third-party host. That is a data-governance decision, not a
+  technical one — get it approved by whoever owns the rework application.
 
 ## How it works
 
@@ -191,8 +276,13 @@ The ones that matter:
 | Endpoint | Returns |
 | --- | --- |
 | `GET /records` | every record whose detail page is in, newest first (`?model=MAM`, `?includePending=true`) |
-| `GET /records/status` | scraper health, charset, last scans, sync progress counts |
+| `GET /records/status` | scraper health, charset, last scans, sync progress, plant-agent contact |
+| `POST /api/scraper/ingest` | a results page pushed by the plant agent; answers with the detail pages to fetch next |
+| `POST /api/scraper/ingest/details` | a batch of detail pages, same answer |
 | WebSocket | `record.new`, `record.updated`, `record.closed`, `records.refresh` |
+
+Both ingest endpoints require the `x-sync-secret` header and take pages as
+base64 of the raw bytes.
 
 ---
 
@@ -224,5 +314,7 @@ a quality-control release, and an error code added mid-repair.
   replace the HTML parsing with structured data and let us request only what
   changed. The source is behind one interface (`RemoteSource`), so adding it is
   a contained change.
-- The dashboard hosted on Vercel can never reach the plant server; it falls
-  back to generated data and labels itself clearly as demo.
+- **Live Cloud Connectivity:** The Vercel dashboard (`https://ksk-scraper-ashy.vercel.app`)
+  receives live plant updates via the Railway relay backend (`https://ksk-scraper-production.up.railway.app`)
+  whenever the `live-sync.bat` agent is running on the SEBN network. When the agent is idle or disconnected,
+  it displays the most recent synced data and fallback demo indicators.

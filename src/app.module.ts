@@ -16,16 +16,29 @@ import { ScraperModule } from './scraper/scraper.module';
         // compiler cannot discriminate on `type` and tries to validate the
         // SQLite shape against the mssql options interface.
         if (DB_DRIVER === 'postgres') {
-          const postgres: TypeOrmModuleOptions = {
-            type: 'postgres',
-            host: config.get<string>('DB_HOST', 'localhost'),
-            port: config.get<number>('DB_PORT', 5432),
-            username: config.get<string>('DB_USERNAME', 'postgres'),
-            password: config.get<string>('DB_PASSWORD', 'postgres'),
-            database: config.get<string>('DB_NAME', 'ksk_scraper'),
-            autoLoadEntities: true,
-            synchronize: true,
-          };
+          // Railway (and most hosts) inject a single DATABASE_URL. Its private
+          // *.railway.internal address needs no TLS; the public proxy address
+          // does, and presents a certificate Node will not chain, hence the
+          // relaxed check there only.
+          const url = config.get<string>('DATABASE_URL');
+          const needsSsl =
+            config.get<string>('DB_SSL') === 'true' ||
+            (Boolean(url) && !/\.railway\.internal[:/]/.test(url as string));
+          const ssl = needsSsl ? { rejectUnauthorized: false } : undefined;
+
+          const postgres: TypeOrmModuleOptions = url
+            ? { type: 'postgres', url, ssl, autoLoadEntities: true, synchronize: true }
+            : {
+                type: 'postgres',
+                host: config.get<string>('DB_HOST', 'localhost'),
+                port: config.get<number>('DB_PORT', 5432),
+                username: config.get<string>('DB_USERNAME', 'postgres'),
+                password: config.get<string>('DB_PASSWORD', 'postgres'),
+                database: config.get<string>('DB_NAME', 'ksk_scraper'),
+                ssl,
+                autoLoadEntities: true,
+                synchronize: true,
+              };
           return postgres;
         }
 
@@ -37,7 +50,11 @@ import { ScraperModule } from './scraper/scraper.module';
         // to live would get fake records mixed permanently into real factory
         // data — the seed only runs on an empty database, so nothing would ever
         // clean them out.
-        const mode = config.get<string>('SCRAPER_MODE', 'mock') === 'live' ? 'live' : 'mock';
+        // The mode itself, not just live-or-mock: a relay run must not land in
+        // the mock file, which is exactly how fake records get mixed with real
+        // ones. Anything unrecognised is treated as mock, the safe default.
+        const configured = config.get<string>('SCRAPER_MODE', 'mock').toLowerCase();
+        const mode = ['live', 'relay', 'mock'].includes(configured) ? configured : 'mock';
         const sqlite: TypeOrmModuleOptions = {
           type: 'better-sqlite3',
           database: `${config.get<string>('DB_NAME', 'ksk_scraper')}-${mode}.sqlite`,

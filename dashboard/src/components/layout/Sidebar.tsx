@@ -60,9 +60,11 @@ function DataSourceNote() {
       ? 'Connecting to the scraper…'
       : mode === 'live'
         ? 'Live · SEBN rework site'
-        : mode === 'mock'
-          ? 'Mock data · scraper in test mode'
-          : 'Scraper backend'
+        : mode === 'relay'
+          ? 'Live · via the plant sync PC'
+          : mode === 'mock'
+            ? 'Mock data · scraper in test mode'
+            : 'Scraper backend'
 
   return <p className="text-[0.6875rem] text-rail-muted">{text}</p>
 }
@@ -77,9 +79,11 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
     >
       <div className="px-5 pt-5 pb-4">
         <div className="flex items-center gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-s1 to-s1/70 text-[0.6875rem] font-bold tracking-tight text-white shadow-lg shadow-black/20">
-            SE
-          </div>
+          <img
+            src="/sebn-logo.png"
+            alt="SEBN"
+            className="h-9 w-auto shrink-0 rounded-lg shadow-lg shadow-black/20"
+          />
           <div className="min-w-0">
             <p className="truncate text-[0.9375rem] leading-tight font-semibold text-rail-ink">
               SEBN <span className="text-rail-muted">TN3</span>
@@ -87,11 +91,15 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
             <p className="truncate text-[0.6875rem] text-rail-muted">Rework quality</p>
           </div>
         </div>
-        {/* Customer programme this plant's output feeds. Text label only — no
-            third-party emblem is reproduced. */}
-        <p className="mt-3 border-t border-white/8 pt-3 text-[0.625rem] tracking-[0.14em] text-rail-muted uppercase">
-          Mercedes-Benz programme
-        </p>
+        <div className="mt-3 flex items-center gap-2 border-t border-white/8 pt-3">
+          {/* Mercedes-Benz three-pointed star */}
+          <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-rail-muted" fill="currentColor" aria-hidden>
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 1.5c4.69 0 8.5 3.81 8.5 8.5s-3.81 8.5-8.5 8.5S3.5 16.69 3.5 12 7.31 3.5 12 3.5zM12 6l-5.2 9h2.4L12 10.2 14.8 15h2.4L12 6z" />
+          </svg>
+          <p className="text-[0.625rem] tracking-[0.14em] text-rail-muted uppercase">
+            Mercedes-Benz programme
+          </p>
+        </div>
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-2">
