@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, IsNull, LessThan, MoreThanOrEqual, Not, Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   DETAIL_CYCLE_INTERVAL_MS,
   DETAIL_FETCH_DELAY_MS,
@@ -9,12 +9,10 @@ import {
   INLINE_DETAIL_LIMIT,
   KSK_MODELS,
   KskModel,
-  LIVE_WATCH_WINDOW_HOURS,
   MAX_DETAIL_FETCH_PER_CYCLE,
-  OPEN_RECHECK_MS,
-  PENDING_RETRY_MS,
-  STALE_OPEN_RECHECK_MS,
+  RELAY_MODE,
 } from './constants';
+import { DetailQueueService } from './detail-queue.service';
 import { KskRecord } from './entities/ksk-record.entity';
 import { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
 import { ScraperStatusService } from './scraper-status.service';
@@ -52,6 +50,7 @@ export class ScraperScheduler {
     private readonly scraperService: ScraperService,
     private readonly gateway: ScraperGateway,
     private readonly status: ScraperStatusService,
+    private readonly detailQueue: DetailQueueService,
     @InjectRepository(KskRecord)
     private readonly recordRepo: Repository<KskRecord>,
   ) {}
@@ -62,7 +61,9 @@ export class ScraperScheduler {
 
   @Interval(FAST_SCAN_INTERVAL_MS)
   async handleListScan(): Promise<void> {
-    if (this.listRunning) return;
+    // In relay mode the pages arrive by HTTP push from inside the plant; this
+    // instance has no route to the rework site and must not try.
+    if (RELAY_MODE || this.listRunning) return;
     this.listRunning = true;
     try {
       for (const model of KSK_MODELS) await this.scanModel(model);
@@ -161,7 +162,9 @@ export class ScraperScheduler {
 
   @Interval(DETAIL_CYCLE_INTERVAL_MS)
   async handleDetailCycle(): Promise<void> {
-    if (this.detailRunning) return;
+    // Same in relay mode: the agent fetches detail pages and posts them; the
+    // server only decides WHICH ones (DetailQueueService, via IngestService).
+    if (RELAY_MODE || this.detailRunning) return;
     this.detailRunning = true;
 
     const started = Date.now();
@@ -172,7 +175,7 @@ export class ScraperScheduler {
     let lastError: string | null = null;
 
     try {
-      const candidates = await this.pickDetailCandidates(MAX_DETAIL_FETCH_PER_CYCLE);
+      const candidates = await this.detailQueue.pick(MAX_DETAIL_FETCH_PER_CYCLE);
 
       for (const record of candidates) {
         const wasPending = record.detailFetchedAt === null;
@@ -227,95 +230,4 @@ export class ScraperScheduler {
     }
   }
 
-  /**
-   * Fills one cycle's budget in priority order, so a multi-thousand-record
-   * backfill can never delay a live closure by more than one cycle.
-   */
-  private async pickDetailCandidates(budget: number): Promise<KskRecord[]> {
-    const now = Date.now();
-    const liveCutoff = new Date(now - LIVE_WATCH_WINDOW_HOURS * 3_600_000);
-    const picked: KskRecord[] = [];
-    const seen = new Set<number>();
-
-    const take = (rows: KskRecord[]) => {
-      for (const row of rows) {
-        if (picked.length >= budget) return;
-        if (seen.has(row.id)) continue;
-        seen.add(row.id);
-        picked.push(row);
-      }
-    };
-    const remaining = () => budget - picked.length;
-
-    // 1. The live watch-list: recent records that have not finished the
-    //    three-stage flow yet — still open, OR repaired but not yet released
-    //    by quality control, which lands seconds to minutes after the repair
-    //    (manual §5). Dropping a record at "reworked" left every quality
-    //    control timestamp null.
-    const recheckBefore = new Date(now - OPEN_RECHECK_MS);
-    take(
-      await this.recordRepo.find({
-        where: [
-          {
-            reworked: IsNull(),
-            detailFetchedAt: Not(IsNull()),
-            registered: MoreThanOrEqual(liveCutoff),
-            detailCheckedAt: LessThan(recheckBefore),
-          },
-          {
-            reworked: Not(IsNull()),
-            qualityControlDate: IsNull(),
-            detailFetchedAt: Not(IsNull()),
-            registered: MoreThanOrEqual(liveCutoff),
-            detailCheckedAt: LessThan(recheckBefore),
-          },
-        ],
-        order: { registered: 'DESC' },
-        take: budget,
-      }),
-    );
-
-    // 2. Known only from the list page — newest first, failed ones backed off.
-    if (remaining() > 0) {
-      take(
-        await this.recordRepo.find({
-          where: [
-            { detailFetchedAt: IsNull(), detailCheckedAt: IsNull() },
-            { detailFetchedAt: IsNull(), detailCheckedAt: LessThan(new Date(now - PENDING_RETRY_MS)) },
-          ],
-          order: { registered: 'DESC' },
-          take: remaining(),
-        }),
-      );
-    }
-
-    // 3. Unfinished far longer than normal — checked rarely, least recently
-    //    first, so one abandoned record can never crowd out live traffic.
-    if (remaining() > 0) {
-      const staleBefore = new Date(now - STALE_OPEN_RECHECK_MS);
-      take(
-        await this.recordRepo.find({
-          where: [
-            {
-              reworked: IsNull(),
-              detailFetchedAt: Not(IsNull()),
-              registered: LessThan(liveCutoff),
-              detailCheckedAt: LessThan(staleBefore),
-            },
-            {
-              reworked: Not(IsNull()),
-              qualityControlDate: IsNull(),
-              detailFetchedAt: Not(IsNull()),
-              registered: LessThan(liveCutoff),
-              detailCheckedAt: LessThan(staleBefore),
-            },
-          ],
-          order: { detailCheckedAt: 'ASC' },
-          take: remaining(),
-        }),
-      );
-    }
-
-    return picked;
-  }
 }

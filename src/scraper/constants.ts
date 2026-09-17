@@ -29,7 +29,17 @@ export function projectFor(model: KskModel): ProjectName {
 // defined — so these must be plain constants, resolved early.
 // ---------------------------------------------------------------------------
 
-const LIVE = (process.env.SCRAPER_MODE ?? 'mock').toLowerCase() === 'live';
+const MODE = (process.env.SCRAPER_MODE ?? 'mock').toLowerCase();
+
+/**
+ * relay = this instance never reaches the rework site itself. It is the cloud
+ * half of the bridge: a PowerShell agent inside the SEBN network pushes the
+ * pages to POST /api/scraper/ingest, because the plant server is unreachable
+ * from outside. Scheduled jobs stay off; everything else is identical.
+ */
+export const RELAY_MODE = MODE === 'relay';
+
+const LIVE = MODE === 'live';
 
 function envNumber(name: string, fallback: number): number {
   const raw = process.env[name];

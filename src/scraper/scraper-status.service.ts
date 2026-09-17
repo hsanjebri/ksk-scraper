@@ -40,11 +40,21 @@ export class ScraperStatusService {
     lastError: null,
   };
   private totals = { fetched: 0, failed: 0 };
+  private agent: { name: string | null; lastSeenAt: string } | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
   setCharset(charset: string): void {
     this.charset = charset;
+  }
+
+  /**
+   * Last contact from the plant-side agent (relay mode). This is how the
+   * dashboard can tell "nothing is happening in the plant" from "the bridge
+   * is down", which look identical from outside the network.
+   */
+  agentSeen(agent: string | null): void {
+    this.agent = { name: agent, lastSeenAt: new Date().toISOString() };
   }
 
   listScanned(model: string, rowsOnPage: number): void {
@@ -72,6 +82,8 @@ export class ScraperStatusService {
       startedAt: this.startedAt,
       charset: this.charset,
       lists: Object.fromEntries(this.lists),
+      // Null unless a plant-side agent is pushing pages (relay mode).
+      agent: this.agent,
       detail: { ...this.detail, totalFetched: this.totals.fetched, totalFailed: this.totals.failed },
     };
   }

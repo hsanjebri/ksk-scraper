@@ -88,6 +88,44 @@ function SyncBadge() {
   )
 }
 
+/**
+ * State of the plant bridge.
+ *
+ * In relay mode the data comes from an agent running on a PC inside the SEBN
+ * network, because the rework server is unreachable from outside. If that PC
+ * sleeps or leaves the network, the dashboard would otherwise just look quiet
+ * — identical to a plant with nothing to report. This says which it is.
+ */
+function BridgeBadge() {
+  const status = useSyncStatus((s) => s.status)
+  const demo = useRecords((s) => s.demo)
+  useNow(5000)
+
+  if (demo || !status || status.mode !== 'relay') return null
+
+  const lastSeen = status.agent ? new Date(status.agent.lastSeenAt) : null
+  const minutesSince = lastSeen ? (Date.now() - lastSeen.getTime()) / 60_000 : Infinity
+  const stale = minutesSince > 3
+
+  return (
+    <div
+      className="flex items-center gap-1.5 text-[0.6875rem]"
+      role="status"
+      title={
+        lastSeen
+          ? `The sync program on ${status.agent?.name ?? 'the plant PC'} last sent data ${relativeTime(lastSeen)}. It must stay open for live updates.`
+          : 'No plant PC has sent data yet. Start live-sync.bat inside the SEBN network.'
+      }
+    >
+      <span className={clsx('inline-block size-2 rounded-full', stale ? 'bg-critical' : 'bg-good')} aria-hidden />
+      <span className={clsx('font-medium', stale ? 'text-critical' : 'text-ink-secondary')}>
+        {lastSeen ? (stale ? 'Plant bridge silent' : 'Plant bridge') : 'Plant bridge not started'}
+      </span>
+      {lastSeen && <span className="text-ink-muted">{relativeTime(lastSeen)}</span>}
+    </div>
+  )
+}
+
 function ModelFilter() {
   const records = useRecords((s) => s.records)
   const model = useFilters((s) => s.model)
@@ -173,12 +211,18 @@ export function Topbar({ title, onMenu }: { title: string; onMenu: () => void })
           <h1 className="truncate text-base font-semibold text-ink sm:text-lg">{title}</h1>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <ConnectionDot />
+            <BridgeBadge />
             <SyncBadge />
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <ModelFilter />
+          <img
+            src="/sebn-mercedes-banner.png"
+            alt="SEBN TN03 | Mercedes-Benz"
+            className="hidden h-8 w-auto rounded sm:block"
+          />
           <ThemeToggle />
         </div>
       </div>

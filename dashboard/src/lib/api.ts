@@ -15,9 +15,12 @@ const BASE_HEADERS: HeadersInit = {
 
 /** GET /records/status — scraper health and first-sync progress. */
 export interface ScraperStatus {
-  mode: 'live' | 'mock'
+  /** `relay` = pages are pushed by the agent running inside the SEBN network. */
+  mode: 'live' | 'mock' | 'relay'
   startedAt: string
   charset: string | null
+  /** Last contact from that agent; null when nothing has ever pushed. */
+  agent: { name: string | null; lastSeenAt: string } | null
   lists: Record<string, { lastScanAt: string | null; rowsOnPage: number; lastError: string | null }>
   detail: {
     fetched: number

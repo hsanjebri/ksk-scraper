@@ -12,20 +12,31 @@ export class ScraperGateway {
   @WebSocketServer()
   server: Server;
 
+  /**
+   * No server exists when the app runs without an HTTP listener — the CLI
+   * tools (seed:captured, db:clear-mock) build an application context and go
+   * through the same ingest code. Emitting then threw and killed the command
+   * halfway through, leaving the database half-loaded.
+   */
+  private emit(event: string, payload?: unknown): void {
+    if (!this.server) return;
+    this.server.emit(event, payload);
+  }
+
   emitNewRecord(record: KskRecord): void {
     this.logger.debug(`record.new -> ${record.model} #${record.no}`);
-    this.server.emit('record.new', record);
+    this.emit('record.new', record);
   }
 
   emitUpdatedRecord(record: KskRecord): void {
     this.logger.debug(`record.updated -> ${record.model} #${record.no}`);
-    this.server.emit('record.updated', record);
+    this.emit('record.updated', record);
   }
 
   /** Emitted specifically for the "En cours" -> "Terminé" transition. */
   emitClosedRecord(record: KskRecord): void {
     this.logger.debug(`record.closed -> ${record.model} #${record.no}`);
-    this.server.emit('record.closed', record);
+    this.emit('record.closed', record);
   }
 
   /**
@@ -35,6 +46,6 @@ export class ScraperGateway {
    */
   emitRefresh(): void {
     this.logger.debug('records.refresh');
-    this.server.emit('records.refresh');
+    this.emit('records.refresh');
   }
 }

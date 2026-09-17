@@ -31,8 +31,10 @@ export class ScraperSeedService implements OnApplicationBootstrap {
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
-    if (this.config.get<string>('SCRAPER_MODE', 'mock') !== 'mock') {
-      this.logger.log('SCRAPER_MODE=live — skipping fake data seed.');
+    const mode = this.config.get<string>('SCRAPER_MODE', 'mock');
+    if (mode !== 'mock') {
+      this.logger.log(`SCRAPER_MODE=${mode} — skipping fake data seed.`);
+      await this.warnAboutMockLeftovers(mode);
       return;
     }
 
@@ -53,23 +55,28 @@ export class ScraperSeedService implements OnApplicationBootstrap {
       return;
     }
 
-    // 60 per model (~120 total) spread over ~12 weeks — enough per-week volume
-    // for the dashboard's weekly trend, deltas and sparklines to be meaningful.
-    this.mockRemote.seedInitial(60);
+    // 600 per model over ~12 weeks (~50/week each). The real MAM page carries
+    // 2,938 records over the same span; 60 per model made every weekly figure
+    // two orders of magnitude too small, and a rework rate of ~0.3% where the
+    // real data gives ~18% against the same assumed production volume.
+    this.mockRemote.seedInitial(600);
 
     for (const model of KSK_MODELS) {
       const remoteRecords = this.mockRemote.getAllSeeded(model);
       let newestNo: string | null = null;
 
-      for (const remote of remoteRecords) {
+      const entities = remoteRecords.map((remote) => {
         const entity = this.scraperService.mapRemoteToEntity(remote);
         entity.detailFetchedAt = new Date();
         entity.detailCheckedAt = new Date();
-        await this.recordRepo.save(entity);
         if (newestNo === null || Number(remote.no) > Number(newestNo)) {
           newestNo = remote.no;
         }
-      }
+        return entity;
+      });
+      // One transaction per chunk rather than per record: saving these one at
+      // a time made a first start take minutes.
+      await this.recordRepo.save(entities, { chunk: 200 });
 
       await this.scrapeStateRepo.save({
         model,
@@ -79,5 +86,30 @@ export class ScraperSeedService implements OnApplicationBootstrap {
     }
 
     this.logger.log(`Seeded ${await this.recordRepo.count()} fake KskRecord(s).`);
+  }
+
+  /**
+   * Shouts if a live or relay database still holds records from a mock run.
+   *
+   * A server started without SCRAPER_MODE defaults to mock and seeds fake
+   * records; pointing that same database at the plant afterwards would blend
+   * invented rows into reported quality figures, with nothing on screen saying
+   * so. Mock numbering starts at 100001 while the real site is in the low
+   * thousands, which makes the leftovers recognisable.
+   */
+  private async warnAboutMockLeftovers(mode: string): Promise<void> {
+    const seeded = await this.recordRepo
+      .createQueryBuilder('r')
+      .where('length(r.no) >= 6')
+      .getCount()
+      .catch(() => 0);
+
+    if (seeded === 0) return;
+
+    this.logger.error(
+      `This database holds ${seeded} record(s) that look like mock data (No. >= 100000) ` +
+        `while running in ${mode} mode. Fake and real records must not be mixed — ` +
+        'clear them with `npm run db:clear-mock -- --yes` before trusting anything on the dashboard.',
+    );
   }
 }
