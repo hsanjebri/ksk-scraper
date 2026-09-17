@@ -127,8 +127,8 @@ describe('live scraper parsers', () => {
 
     // The relay matches labels with startsWith(), so a comment beginning with
     // a label word is swallowed as that field and the comment is lost. These
-    // two cases pin the fix from both sides: prose must survive as a value,
-    // and a genuine inline "Label value" must still be recognised.
+    // cases pin the fix from both sides: prose must survive as a value, and
+    // the label forms the real page actually uses must still be recognised.
     it('does not mistake prose starting with a label word for that label', () => {
       const dict = parseDetailFields(
         '<table><tr><td>Comment</td><td>Reworked &amp; verified, registered twice</td></tr></table>',
@@ -138,11 +138,15 @@ describe('live scraper parsers', () => {
       expect(dict.has('registered')).toBe(false);
     });
 
-    it('still recognises an inline "Label value" with no colon', () => {
+    it('does not treat "label word + number" prose as a label', () => {
+      // An earlier rule accepted "Label 2026-…" with no colon. The real page
+      // never uses that form (it is always "label:" or a label in its own
+      // cell), and the rule misread descriptions such as "shift 2 missing".
       const dict = parseDetailFields(
-        '<table><tr><td>Reworked 2026-09-14 11:45:00</td></tr></table>',
+        '<table><tr><td>Description</td><td>shift 2 connector missing</td></tr></table>',
       );
-      expect(dict.get('reworked')).toEqual(['2026-09-14 11:45:00']);
+      expect(dict.get('description')).toEqual(['shift 2 connector missing']);
+      expect(dict.has('shift')).toBe(false);
     });
 
     it('recognises an inline "Label: value"', () => {

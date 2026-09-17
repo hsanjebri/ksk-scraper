@@ -4,6 +4,7 @@ import {
   closeDemoRecord,
   generateDemoArrival,
   generateDemoRecords,
+  releaseDemoRecord,
 } from '@/lib/demo-data'
 import type { KskRecord } from '@/types'
 import { io, type Socket } from 'socket.io-client'
@@ -21,14 +22,22 @@ interface RecordsState {
   demo: boolean
   /** Record ids that just arrived/changed — drives the row pulse animation. */
   recentlyChanged: Set<number>
-  load: () => Promise<void>
+  /**
+   * `silent` refetches in the background: no skeletons, and a failure keeps
+   * the records already on screen instead of falling back to demo data.
+   */
+  load: (options?: { silent?: boolean }) => Promise<void>
   connect: () => void
   disconnect: () => void
 }
 
 let socket: Socket | null = null
 let demoTimer: ReturnType<typeof setInterval> | null = null
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
 const pulseTimers = new Map<number, ReturnType<typeof setTimeout>>()
+
+/** Coalesces bursts of `records.refresh` into one background refetch. */
+const REFRESH_COALESCE_MS = 1500
 
 export const useRecords = create<RecordsState>((set, get) => {
   /** Inserts or replaces a record by id, newest-registered first. */
@@ -65,14 +74,18 @@ export const useRecords = create<RecordsState>((set, get) => {
     demo: false,
     recentlyChanged: new Set<number>(),
 
-    async load() {
-      set({ loading: true, error: null })
+    async load(options) {
+      const silent = options?.silent ?? false
+      if (!silent) set({ loading: true, error: null })
       try {
         // Always fetch the full set; the global model filter is applied
         // client-side so switching models is instant and doesn't refetch.
         const records = await fetchRecords()
         set({ records, loading: false, demo: false, lastUpdated: new Date() })
       } catch {
+        // A background refresh that fails (backend restarting, network blip)
+        // leaves the real records in place — never swap them for demo data.
+        if (silent) return
         // No backend reachable. That is the normal case for a public deploy —
         // the real backend has to run inside the SEBN network and can never be
         // exposed here — so fall back to generated data instead of showing an
@@ -99,13 +112,30 @@ export const useRecords = create<RecordsState>((set, get) => {
         extraHeaders: { 'ngrok-skip-browser-warning': '1' },
       })
 
+      const scheduleSilentReload = () => {
+        if (refreshTimer) return
+        refreshTimer = setTimeout(() => {
+          refreshTimer = null
+          void get().load({ silent: true })
+        }, REFRESH_COALESCE_MS)
+      }
+
       // Guarded on demo: a stray socket error must never relabel generated
       // data as merely "offline", which would hide that it isn't real.
-      socket.on('connect', () => set({ connection: 'live' }))
+      let wasOffline = false
+      socket.on('connect', () => {
+        set({ connection: 'live' })
+        // Events sent while disconnected are gone for good — refetch once so
+        // a backend restart or network drop never leaves stale numbers.
+        if (wasOffline) scheduleSilentReload()
+        wasOffline = false
+      })
       socket.on('disconnect', () => {
+        wasOffline = true
         if (!get().demo) set({ connection: 'offline' })
       })
       socket.on('connect_error', () => {
+        wasOffline = true
         if (!get().demo) set({ connection: 'offline' })
       })
 
@@ -114,6 +144,9 @@ export const useRecords = create<RecordsState>((set, get) => {
       // record.closed carries the same payload as the updated event that
       // precedes it; upserting twice is idempotent and keeps the pulse alive.
       socket.on('record.closed', upsert)
+      // Sent after a batch of records became ready at once (first-run history
+      // sync, catch-up after downtime) — too many to push one by one.
+      socket.on('records.refresh', scheduleSilentReload)
     },
 
     disconnect() {
@@ -121,6 +154,8 @@ export const useRecords = create<RecordsState>((set, get) => {
       socket = null
       if (demoTimer) clearInterval(demoTimer)
       demoTimer = null
+      if (refreshTimer) clearTimeout(refreshTimer)
+      refreshTimer = null
       for (const timer of pulseTimers.values()) clearTimeout(timer)
       pulseTimers.clear()
       set({ connection: get().demo ? 'demo' : 'offline' })
@@ -138,13 +173,18 @@ export const useRecords = create<RecordsState>((set, get) => {
     let tick = 0
     demoTimer = setInterval(() => {
       tick += 1
-      // New arrival roughly every 20s; a closure roughly every 40s — the same
-      // rhythm as the real 15s/45s schedulers, slowed so it isn't distracting.
-      if (tick % 2 === 1) {
+      // Walks the real three-stage flow one step per tick — a record arrives,
+      // gets repaired, then quality control releases it (rework system manual
+      // §3 → §4 → §5) — at a pace that isn't distracting.
+      const phase = tick % 3
+      if (phase === 1) {
         upsert(generateDemoArrival())
-      } else {
+      } else if (phase === 2) {
         const open = get().records.find((record) => record.reworked === null)
         if (open) upsert(closeDemoRecord(open))
+      } else {
+        const pending = get().records.find((record) => record.awaitingQualityControl)
+        if (pending) upsert(releaseDemoRecord(pending))
       }
     }, 20_000)
   }

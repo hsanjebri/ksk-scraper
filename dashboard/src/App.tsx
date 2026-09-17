@@ -1,6 +1,6 @@
 import { Shell } from '@/components/layout/Shell'
-import { ComingSoon } from '@/pages/ComingSoon'
 import { DefectsAnalysis } from '@/pages/DefectsAnalysis'
+import { Kpi } from '@/pages/Kpi'
 import { Overview } from '@/pages/Overview'
 import { Pareto } from '@/pages/Pareto'
 import { Reports } from '@/pages/Reports'
@@ -18,18 +18,7 @@ export default function App() {
           <Route path="defects" element={<DefectsAnalysis />} />
           <Route path="pareto" element={<Pareto />} />
           <Route path="trends" element={<Trends />} />
-          <Route
-            path="kpi"
-            element={
-              <ComingSoon
-                title="KPI deep-dive"
-                items={[
-                  'Expanded KPI cards with historical mini-charts',
-                  'Configurable target thresholds per metric',
-                ]}
-              />
-            }
-          />
+          <Route path="kpi" element={<Kpi />} />
           <Route path="reports" element={<Reports />} />
         </Route>
       </Routes>

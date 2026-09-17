@@ -3,6 +3,7 @@ import { relativeTime } from '@/lib/format'
 import { modelsIn } from '@/lib/metrics'
 import { ALL_MODELS, useFilters } from '@/store/useFilters'
 import { useRecords } from '@/store/useRecords'
+import { useSyncStatus } from '@/store/useSyncStatus'
 import { useTheme, type ThemeMode } from '@/store/useTheme'
 import clsx from 'clsx'
 import { useMemo } from 'react'
@@ -45,6 +46,44 @@ function ConnectionDot() {
           <span>updated {relativeTime(lastUpdated)}</span>
         </>
       )}
+    </div>
+  )
+}
+
+/**
+ * First-sync progress. On a fresh start in the plant the scraper stores the
+ * whole history from the list pages at once, then fetches detail pages at a
+ * polite pace; records join the dashboard as they complete. Hidden once
+ * nothing is pending.
+ */
+function SyncBadge() {
+  const status = useSyncStatus((s) => s.status)
+  const demo = useRecords((s) => s.demo)
+  if (demo || !status || status.counts.pending === 0) return null
+
+  const { total, ready, pending } = status.counts
+  const pct = total > 0 ? (ready / total) * 100 : 0
+
+  return (
+    <div
+      className="flex items-center gap-2 text-[0.6875rem] text-ink-muted"
+      role="status"
+      title={`${pending.toLocaleString('en-US')} record(s) known from the list page are waiting for their detail page. They appear on the dashboard as soon as it has been read.`}
+    >
+      <span className="font-medium text-ink-secondary">Syncing history</span>
+      <span
+        className="relative h-1.5 w-24 overflow-hidden rounded-full bg-ink/8"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+        aria-label="History sync progress"
+      >
+        <span className="absolute inset-y-0 left-0 rounded-full bg-s1 transition-[width] duration-700" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="tabular">
+        {ready.toLocaleString('en-US')} / {total.toLocaleString('en-US')}
+      </span>
     </div>
   )
 }
@@ -132,7 +171,10 @@ export function Topbar({ title, onMenu }: { title: string; onMenu: () => void })
 
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-base font-semibold text-ink sm:text-lg">{title}</h1>
-          <ConnectionDot />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            <ConnectionDot />
+            <SyncBadge />
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

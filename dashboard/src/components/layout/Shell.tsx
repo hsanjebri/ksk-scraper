@@ -1,5 +1,6 @@
 import { useFilters } from '@/store/useFilters'
 import { useRecords } from '@/store/useRecords'
+import { useSyncStatus } from '@/store/useSyncStatus'
 import { watchSystemTheme } from '@/store/useTheme'
 import { useEffect, useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
@@ -51,6 +52,8 @@ export function Shell() {
   const load = useRecords((s) => s.load)
   const connect = useRecords((s) => s.connect)
   const disconnect = useRecords((s) => s.disconnect)
+  const startSync = useSyncStatus((s) => s.start)
+  const stopSync = useSyncStatus((s) => s.stop)
 
   useEffect(() => {
     let cancelled = false
@@ -59,15 +62,18 @@ export function Shell() {
     // together opened a socket to a dead host and let its error handler
     // overwrite the demo state.
     void load().then(() => {
-      if (!cancelled) connect()
+      if (cancelled) return
+      connect()
+      if (!useRecords.getState().demo) startSync()
     })
     const unwatch = watchSystemTheme()
     return () => {
       cancelled = true
       disconnect()
+      stopSync()
       unwatch()
     }
-  }, [load, connect, disconnect])
+  }, [load, connect, disconnect, startSync, stopSync])
 
   const title = NAV_ITEMS.find((item) => item.to === location.pathname)?.label ?? 'Overview'
 

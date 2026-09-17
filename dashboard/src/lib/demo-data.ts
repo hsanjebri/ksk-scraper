@@ -14,35 +14,67 @@ import { isoWeekLabel } from './metrics'
 const MODELS = ['MAM', 'MCM']
 // ZSB is no longer drawn from a pool — it is derived from the CarID, the way
 // the real system does it. See zsbFor().
-const COLORS = ['Black', 'White', 'Grey', 'Red', 'Blue', 'Silver']
-const SHIFTS = ['1', '2', '3']
-const OPERATORS = ['J. Kowalski', 'A. Nowak', 'M. Wisniewski', 'P. Zielinski', 'K. Wojcik']
-const PRODUCERS = ['Line 1', 'Line 2', 'Supplier X', 'Supplier Y', 'Assembly Station 4']
-const CAVITIES = ['1', '2', '3', 'A1', 'B2', 'C3']
-const INFO = ['Repeat defect', 'First occurrence', 'Known issue #4471', '']
-/** Mirrors the backend mock so the Quality Gate chart has data in demo mode. */
-const QUALITY_GATES = ['EOL Test', 'Visual Inspection', 'Electrical Test', 'Final Audit', 'Customer Line']
+// Every value below is modelled on the pages captured from the live site on
+// 2026-09-17 (2 detail pages, 5,939 list rows) and on the field definitions in
+// the SEBN Standard Rework System manual v7.2.27. Inventing English office
+// vocabulary here taught the wrong shape of the data: the plant records French
+// free text, letter shifts and team names.
+
+/** The list page's Color column is empty on every captured row. */
+const COLORS = ['']
+/** Real shifts are letters — "defect shift: B" on the captured detail pages. */
+const SHIFTS = ['A', 'B']
+/**
+ * "Error producer — who made defect" (manual §3.2). The plant fills it with a
+ * team, not a person: both captured records say "Team2".
+ */
+// Repeated entries weight the draw: a uniform split would put all three teams
+// within a percent of each other and leave the breakdown saying nothing.
+const OPERATORS = ['Team2', 'Team2', 'Team2', 'Team1', 'Team1', 'Team3']
+const PRODUCERS = OPERATORS
+/** "32" and "Not applicable" are the two real captured values. */
+const CAVITIES = ['32', '4', '21', '33', 'Not applicable', 'Not applicable']
+const INFO = ['', '']
+/** "Quality gate — select one of the zones where the failure was found" (§3.2). */
+const QUALITY_GATES = [
+  'EOL Electrical test',
+  'EOL Electrical test',
+  'EOL Electrical test',
+  'Clip test',
+  'Visual inspection',
+  'Final audit',
+]
+/** Verbatim-style comments: lowercase French, connector codes, cavity numbers. */
 const COMMENTS = [
-  'Checked against reference, wiring confirmed damaged.',
-  'Awaiting replacement part from stock.',
-  'Reworked per standard procedure.',
-  'Escalated to quality for review.',
+  'pas de continuité n30/3*1-b-v4 voie21',
+  'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n125*1-b-v1 v32+33',
+  'fil arraché au niveau connecteur e18/5*1-b-v1 voie4',
+  'MANQUE CONNECTEUR E17/47*1-S-V1 +SERTISSAGE',
+  'fils coupe n10*rb2-b-v2 v21 vers e4/17*1-b-v4 v4 ltg 2483534',
+  'fil coupee au niveau s88/8*1-b-v2 voie 2-3',
+  'terminal mal serti, remplace',
   '',
 ]
+/** Error descriptions come from the CQM code list (§3.2) — French, short. */
 const DESCRIPTIONS = [
-  'Continuity failure detected during end-of-line test.',
-  'Connector pin bent during assembly, replaced.',
-  'Sensor reading out of tolerance range.',
-  'Short circuit found on harness segment.',
-  'Loose crimp connection on terminal.',
+  'Manque connecteur',
+  'incorrecte connecteur',
+  'fil coupe',
+  'pas de continuite',
+  'terminal endommage',
+  'inversion',
 ]
 
+/**
+ * "Part type" comes from a CQM list and "part name" from a PPE list per
+ * project (§3.2). Captured: type "connecteur", names like "A126*1-B_V1".
+ */
 const PARTS: { type: string; names: string[] }[] = [
-  { type: 'Wiring Harness', names: ['Main Harness Front', 'Main Harness Rear', 'Door Harness LH'] },
-  { type: 'Connector', names: ['Connector 24-pin', 'Connector 8-pin', 'Inline Connector B'] },
-  { type: 'Sensor Bracket', names: ['Bracket Left Rear', 'Bracket Right Front'] },
-  { type: 'Fuse Box', names: ['Fuse Box Assembly', 'Fuse Carrier 12V'] },
-  { type: 'Relay Module', names: ['Relay Module A3', 'Relay Module B1'] },
+  { type: 'connecteur', names: ['A126*1-B_V1', 'E17/47*1-S_V', 'N73/3*2-B-V1', 'X18/53*5-S-V1'] },
+  { type: 'fil', names: ['N30/3*1-B-V4', 'E4/17*1-B-V4', 'S88/8*1-B-V2'] },
+  { type: 'terminal', names: ['T12*1-B-V2', 'T44*3-S-V1'] },
+  { type: 'joint', names: ['J8*1-B-V1', 'J21*2-S-V3'] },
+  { type: 'tube', names: ['TB5*1-B-V2'] },
 ]
 
 /** Skewed on purpose — a flat distribution makes the Pareto chart pointless. */
@@ -141,6 +173,21 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
     }
   })
 
+  /**
+   * Quality control is its own stage and it closes the Rework ID (§5). On the
+   * captured record it followed the repair after 14 seconds, so the wait is
+   * short — but a few recent records are still waiting, which is the state the
+   * "Awaiting quality control" list exists to surface.
+   */
+  // The share is set high enough that the "Awaiting quality control" list has
+  // rows in a demo. How often it really happens is unknown — the two captured
+  // records were both released — so nothing is read from this number.
+  const qcPending = reworked !== null && hoursAgo < 24 && Math.random() < 0.3
+  const qualityControl =
+    reworked && !qcPending
+      ? new Date(reworked.getTime() + randomInt(10, 300) * 1_000)
+      : null
+
   const record: KskRecord = {
     id,
     no: String(100_000 + id),
@@ -149,9 +196,7 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
     zsb: zsbFor(carId),
     registered: registered.toISOString(),
     reworked: reworked ? reworked.toISOString() : null,
-    qualityControlDate: reworked
-      ? new Date(reworked.getTime() + 30 * 60_000).toISOString()
-      : null,
+    qualityControlDate: qualityControl ? qualityControl.toISOString() : null,
     defectShift,
     detectShift: Math.random() < 0.65 ? defectShift : pick(SHIFTS),
     defectBy: pick(OPERATORS),
@@ -164,6 +209,7 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
     qualityGate: pick(QUALITY_GATES),
     errorCodes,
     status: reworked ? 'Terminé' : 'En cours',
+    awaitingQualityControl: reworked !== null && qualityControl === null,
     week: isoWeekLabel(registered),
     durationMinutes: Math.max(
       0,
@@ -174,7 +220,14 @@ function buildRecord(model: string, maxHoursAgo: number, forceOpen = false): Ksk
 }
 
 /** ~120 records across ~12 weeks, matching what the seeded backend produces. */
-export function generateDemoRecords(perModel = 60): KskRecord[] {
+/**
+ * `perModel` is set to the real volume, not a token sample: the captured MAM
+ * list holds 2,938 records over the 12 weeks this history spans (~245/week).
+ * The old default of 60 per model made every rate two orders of magnitude too
+ * small — a 0.3% rework rate where the real data gives ~18% against the same
+ * assumed production volume — so the demo taught the wrong numbers.
+ */
+export function generateDemoRecords(perModel = 2900): KskRecord[] {
   nextId = 1
   seenCars.clear()
 
@@ -195,17 +248,32 @@ export function generateDemoArrival(): KskRecord {
   return buildRecord(pick(MODELS), LIVE_WINDOW_HOURS, true)
 }
 
-/** Closes an open record, as the 45s watch-list recheck would. */
+/**
+ * Closes an open record, as the watch-list recheck would.
+ *
+ * It lands in the "repaired, quality control pending" state the real system
+ * passes through (manual §4 → §5); the next demo tick releases it.
+ */
 export function closeDemoRecord(record: KskRecord): KskRecord {
   const reworked = new Date()
   return {
     ...record,
     reworked: reworked.toISOString(),
-    qualityControlDate: new Date(reworked.getTime() + 30 * 60_000).toISOString(),
+    qualityControlDate: null,
+    awaitingQualityControl: true,
     status: 'Terminé',
     durationMinutes: Math.max(
       0,
       Math.round((reworked.getTime() - new Date(record.registered).getTime()) / 60_000),
     ),
+  }
+}
+
+/** Quality control releases a repaired record — the third and final stage. */
+export function releaseDemoRecord(record: KskRecord): KskRecord {
+  return {
+    ...record,
+    qualityControlDate: new Date().toISOString(),
+    awaitingQualityControl: false,
   }
 }

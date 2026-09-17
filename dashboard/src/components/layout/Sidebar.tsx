@@ -1,3 +1,5 @@
+import { useRecords } from '@/store/useRecords'
+import { useSyncStatus } from '@/store/useSyncStatus'
 import clsx from 'clsx'
 import { NavLink } from 'react-router-dom'
 
@@ -25,7 +27,7 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/defects', label: 'Defects analysis', icon: 'defects', ready: true },
   { to: '/pareto', label: 'Top 10 / Pareto', icon: 'pareto', ready: true },
   { to: '/trends', label: 'Trends', icon: 'trends', ready: true },
-  { to: '/kpi', label: 'KPI', icon: 'kpi' },
+  { to: '/kpi', label: 'KPI & targets', icon: 'kpi', ready: true },
   { to: '/reports', label: 'Reports', icon: 'reports', ready: true },
 ]
 
@@ -44,6 +46,25 @@ function NavIcon({ path }: { path: string }) {
       <path d={path} />
     </svg>
   )
+}
+
+/** Where the numbers on screen come from — never ambiguous about fake data. */
+function DataSourceNote() {
+  const demo = useRecords((s) => s.demo)
+  const loading = useRecords((s) => s.loading)
+  const mode = useSyncStatus((s) => s.status?.mode)
+
+  const text = demo
+    ? 'Demo data · generated in the browser'
+    : loading && !mode
+      ? 'Connecting to the scraper…'
+      : mode === 'live'
+        ? 'Live · SEBN rework site'
+        : mode === 'mock'
+          ? 'Mock data · scraper in test mode'
+          : 'Scraper backend'
+
+  return <p className="text-[0.6875rem] text-rail-muted">{text}</p>
 }
 
 export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () => void }) {
@@ -111,9 +132,7 @@ export function Sidebar({ open, onNavigate }: { open: boolean; onNavigate: () =>
       </nav>
 
       <div className="border-t border-white/8 px-5 py-3">
-        <p className="text-[0.6875rem] text-rail-muted">
-          Mock data · scraper not yet on-network
-        </p>
+        <DataSourceNote />
       </div>
     </aside>
   )

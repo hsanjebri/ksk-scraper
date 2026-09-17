@@ -42,20 +42,38 @@ export interface RemoteDetailRecord extends RemoteListRow {
 
 // ZSB is no longer drawn from a pool — it is derived from the CarID, the way
 // the real system does it. See zsbFor().
-const COLOR_POOL = ['Black', 'White', 'Grey', 'Red', 'Blue', 'Silver'];
-const SHIFT_POOL = ['1', '2', '3'];
-const OPERATOR_POOL = ['J. Kowalski', 'A. Nowak', 'M. Wisniewski', 'P. Zielinski', 'K. Wojcik'];
+/**
+ * The pools below are modelled on the pages captured from the live site on
+ * 2026-09-17 and on the field definitions in the SEBN Standard Rework System
+ * manual v7.2.27. The earlier English office vocabulary ("Fuse Box Assembly",
+ * "J. Kowalski") made every screen and export look unlike the system this is
+ * standing in for.
+ */
+/** The list page's Color column is empty on all 5,939 captured rows. */
+const COLOR_POOL = [''];
+/** Shifts are letters on the real detail pages ("defect shift: B"). */
+const SHIFT_POOL = ['A', 'B'];
+/**
+ * "Error producer — who made defect" (manual §3.2). The plant enters a team,
+ * not a person: both captured records say "Team2".
+ */
+// Repeated entries weight the draw: a uniform split would put all three teams
+// within a percent of each other and leave the breakdown saying nothing.
+const OPERATOR_POOL = ['Team2', 'Team2', 'Team2', 'Team1', 'Team1', 'Team3'];
 /**
  * Part names paired with the type they actually belong to. Drawing type and
  * name from two independent pools produced nonsense like a "Main Harness
  * Front" of type "Fuse Box", which makes any part-type breakdown meaningless.
+ *
+ * Types come from a CQM list and names from a per-project PPE list (§3.2).
+ * Captured values: type "connecteur", names "A126*1-B_V1", "E17/47*1-S_V".
  */
 const PARTS: { type: string; names: string[] }[] = [
-  { type: 'Wiring Harness', names: ['Main Harness Front', 'Main Harness Rear', 'Door Harness LH'] },
-  { type: 'Connector', names: ['Connector 24-pin', 'Connector 8-pin', 'Inline Connector B'] },
-  { type: 'Sensor Bracket', names: ['Bracket Left Rear', 'Bracket Right Front'] },
-  { type: 'Fuse Box', names: ['Fuse Box Assembly', 'Fuse Carrier 12V'] },
-  { type: 'Relay Module', names: ['Relay Module A3', 'Relay Module B1'] },
+  { type: 'connecteur', names: ['A126*1-B_V1', 'E17/47*1-S_V', 'N73/3*2-B-V1', 'X18/53*5-S-V1'] },
+  { type: 'fil', names: ['N30/3*1-B-V4', 'E4/17*1-B-V4', 'S88/8*1-B-V2'] },
+  { type: 'terminal', names: ['T12*1-B-V2', 'T44*3-S-V1'] },
+  { type: 'joint', names: ['J8*1-B-V1', 'J21*2-S-V3'] },
+  { type: 'tube', names: ['TB5*1-B-V2'] },
 ];
 
 /**
@@ -103,35 +121,45 @@ function randomPart(): { type: string; name: string } {
   const group = pickRandom(PARTS);
   return { type: group.type, name: pickRandom(group.names) };
 }
-const ERROR_PRODUCER_POOL = ['Line 1', 'Line 2', 'Supplier X', 'Supplier Y', 'Assembly Station 4'];
-const CAVITY_POOL = ['1', '2', '3', 'A1', 'B2', 'C3'];
+/** Same team list: the error-code rows name a team as the producer too. */
+const ERROR_PRODUCER_POOL = OPERATOR_POOL;
+/** "32" and "Not applicable" are the two values seen on the captured pages. */
+const CAVITY_POOL = ['32', '4', '21', '33', 'Not applicable', 'Not applicable'];
+/** Verbatim-style: lowercase French, connector codes, cavity numbers. */
 const COMMENT_POOL = [
-  'Checked against reference, wiring confirmed damaged.',
-  'Awaiting replacement part from stock.',
-  'Reworked per standard procedure.',
-  'Escalated to quality for review.',
+  'pas de continuité n30/3*1-b-v4 voie21',
+  'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n125*1-b-v1 v32+33',
+  'fil arraché au niveau connecteur e18/5*1-b-v1 voie4',
+  'MANQUE CONNECTEUR E17/47*1-S-V1 +SERTISSAGE',
+  'fils coupe n10*rb2-b-v2 v21 vers e4/17*1-b-v4 v4 ltg 2483534',
+  'fil coupee au niveau s88/8*1-b-v2 voie 2-3',
+  'terminal mal serti, remplace',
   '',
 ];
+/** Descriptions come from the CQM error-code list (§3.2) — short French. */
 const DESCRIPTION_POOL = [
-  'Continuity failure detected during end-of-line test.',
-  'Connector pin bent during assembly, replaced.',
-  'Sensor reading out of tolerance range.',
-  'Short circuit found on harness segment.',
-  'Loose crimp connection on terminal.',
+  'Manque connecteur',
+  'incorrecte connecteur',
+  'fil coupe',
+  'pas de continuite',
+  'terminal endommage',
+  'inversion',
 ];
-const INFO_POOL = ['Repeat defect', 'First occurrence', 'Known issue #4471', ''];
+/** Info repeats the full comment on the real pages; often blank. */
+const INFO_POOL = ['', ''];
 
 /**
- * Quality gates — the station where the defect was caught. Taken from the
- * production relay's "Reworked From - Quality Gate" breakdown so the mock
- * exercises the same chart the real data will.
+ * "Quality gate — select one of the zones where the failure was found" (§3.2).
+ * Both captured records say "EOL Electrical test"; the rest are plausible
+ * zones, weighted so the dominant one stays dominant.
  */
 const QUALITY_GATE_POOL = [
-  'EOL Test',
-  'Visual Inspection',
-  'Electrical Test',
-  'Final Audit',
-  'Customer Line',
+  'EOL Electrical test',
+  'EOL Electrical test',
+  'EOL Electrical test',
+  'Clip test',
+  'Visual inspection',
+  'Final audit',
 ];
 
 /**
@@ -233,7 +261,16 @@ export function generateRandomDetailRecord(
     comment: pickRandom(COMMENT_POOL),
     color: pickRandom(COLOR_POOL),
     reworked: reworked ? reworked.toISOString() : null,
-    qualityControlDate: reworked ? new Date(reworked.getTime() + 30 * 60_000).toISOString() : null,
+    // Quality control is its own stage and it is what closes the Rework ID
+    // (manual §5). On the captured record it followed the repair after 14
+    // seconds — not the half hour this used to invent — and a few recent
+    // records are still waiting for it.
+    // Pending only within the last day: a harness waiting three days for a
+    // quality check would have been escalated long before.
+    qualityControlDate:
+      reworked && !(hoursAgo(registered) < 24 && Math.random() < 0.3)
+        ? new Date(reworked.getTime() + randomInt(10, 300) * 1_000).toISOString()
+        : null,
     defectShift,
     // Most defects are caught on the shift that made them; the rest escape to
     // a later one. Picking both shifts independently made "caught on the same

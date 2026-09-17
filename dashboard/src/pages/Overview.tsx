@@ -6,7 +6,6 @@ import { Reveal } from '@/components/ui/Reveal'
 import { StatTile } from '@/components/ui/StatTile'
 import { Card } from '@/components/ui/primitives'
 import { useFilteredRecords } from '@/hooks/useDashboardData'
-import { KPI_TARGETS } from '@/lib/config'
 import { duration, percent, shortWeek } from '@/lib/format'
 import {
   allErrorEntries,
@@ -18,14 +17,18 @@ import {
 } from '@/lib/metrics'
 import { useFilters } from '@/store/useFilters'
 import { useRecords } from '@/store/useRecords'
+import { missesTarget, useTargets, type Targets } from '@/store/useTargets'
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 
-/** Target breaches, shown on the tile as an icon + label (never colour alone). */
-function isBreached(kpi: Kpi): boolean {
-  if (!Number.isFinite(kpi.value)) return false
-  if (kpi.key === 'reworkRate') return kpi.value > KPI_TARGETS.reworkRatePct
-  if (kpi.key === 'fpy') return kpi.value < KPI_TARGETS.firstPassYieldPct
-  if (kpi.key === 'leadTime') return kpi.value > KPI_TARGETS.avgLeadTimeMinutes
+/**
+ * Target breaches, shown on the tile as an icon + label (never colour alone).
+ * Targets are the ones set on the KPI page.
+ */
+function isBreached(kpi: Kpi, targets: Targets): boolean {
+  if (kpi.key === 'reworkRate') return missesTarget(kpi.value, targets.reworkRatePct, false)
+  if (kpi.key === 'fpy') return missesTarget(kpi.value, targets.firstPassYieldPct, true)
+  if (kpi.key === 'leadTime') return missesTarget(kpi.value, targets.avgLeadTimeMinutes, false)
   return false
 }
 
@@ -37,6 +40,7 @@ export function Overview() {
   const errorCode = useFilters((s) => s.errorCode)
   const toggleErrorCode = useFilters((s) => s.toggleErrorCode)
   const clearDrilldown = useFilters((s) => s.clearDrilldown)
+  const targets = useTargets((s) => s.targets)
 
   const kpis = useMemo(() => buildKpis(records), [records])
 
@@ -56,8 +60,8 @@ export function Overview() {
         <h2 className="text-sm font-semibold text-critical">Couldn’t reach the API</h2>
         <p className="mt-1 text-xs text-ink-secondary">{error}</p>
         <p className="mt-3 text-xs text-ink-muted">
-          Check the backend is up: <code className="rounded bg-ink/6 px-1.5 py-0.5">docker compose ps</code>{' '}
-          in the project root, then reload.
+          Check the backend is running (<code className="rounded bg-ink/6 px-1.5 py-0.5">npm run start:prod</code>{' '}
+          in the project root), then reload.
         </p>
       </Card>
     )
@@ -69,7 +73,7 @@ export function Overview() {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
           {kpis.map((kpi, index) => (
             <Reveal key={kpi.key} index={index}>
-              <StatTile kpi={kpi} loading={loading} breached={isBreached(kpi)} />
+              <StatTile kpi={kpi} loading={loading} breached={isBreached(kpi, targets)} />
             </Reveal>
           ))}
         </div>
@@ -145,9 +149,17 @@ export function Overview() {
       </Reveal>
 
       <p className="text-[0.6875rem] text-ink-muted">
-        Avg lead time target {duration(KPI_TARGETS.avgLeadTimeMinutes)} · rework rate target ≤{' '}
-        {percent(KPI_TARGETS.reworkRatePct)} · FPY target ≥{' '}
-        {percent(KPI_TARGETS.firstPassYieldPct)}. Metrics marked{' '}
+        Avg lead time target{' '}
+        {targets.avgLeadTimeMinutes === null ? 'not set' : duration(targets.avgLeadTimeMinutes)} ·
+        rework rate target{' '}
+        {targets.reworkRatePct === null ? 'not set' : `≤ ${percent(targets.reworkRatePct)}`} · FPY
+        target{' '}
+        {targets.firstPassYieldPct === null ? 'not set' : `≥ ${percent(targets.firstPassYieldPct)}`}{' '}
+        (
+        <Link to="/kpi" className="underline underline-offset-2 hover:text-ink">
+          edit targets
+        </Link>
+        ). Metrics marked{' '}
         <span className="rounded bg-ink/6 px-1 py-0.5 font-medium">est.</span> are computed
         against an assumed production volume — swap in a real production feed before
         reporting them.
