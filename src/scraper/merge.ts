@@ -1,4 +1,8 @@
-import type { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
+import type {
+  RemoteDetailRecord,
+  RemoteErrorCodeRow,
+  RemoteListRow,
+} from './mock/mock-data.generator';
 
 /**
  * Pure merge logic, deliberately kept in its own module with NO Nest or
@@ -72,4 +76,118 @@ export function mergeListAndDetail(
     qualityGate: detail?.qualityGate ?? null,
     errorCodes: detail?.errorCodes ?? [],
   };
+}
+
+/** The fields a detail fetch is allowed to fill in on an already-stored record. */
+export interface EnrichableRecord {
+  carId: string;
+  zsb: string;
+  errorCode: string | null;
+  comment: string | null;
+  reworked: Date | null;
+  qualityControlDate: Date | null;
+  defectShift: string | null;
+  detectShift: string | null;
+  defectBy: string | null;
+  partType: string | null;
+  partName: string | null;
+  description: string | null;
+  qualityGate: string | null;
+}
+
+const blank = (value: unknown) => value === null || value === undefined || value === '';
+
+/**
+ * Applies a (re-)fetched detail page to a record that is already stored.
+ *
+ * Used both to enrich backfilled list-only records and to re-check open ones,
+ * so it must be safe to run repeatedly:
+ *
+ *  - A value is only overwritten by a NON-EMPTY fetched value. A detail page
+ *    that comes back partial on one poll must not erase what an earlier poll
+ *    found.
+ *  - A closed record never re-opens: once `reworked` is set it stays set.
+ *  - List-owned fields (CarID, ZSB, error code) keep the list's value and only
+ *    take the detail's when the list had none.
+ *  - Comment takes whichever is longer — both pages clip it at 60 characters,
+ *    and only the detail's error list carries it in full.
+ *
+ * Returns whether this call is what closed the record, so the caller can emit
+ * a close event exactly once.
+ */
+export function enrichWithDetail(
+  record: EnrichableRecord,
+  fresh: RemoteDetailRecord,
+): { closedNow: boolean } {
+  const wasOpen = record.reworked === null || record.reworked === undefined;
+
+  if (blank(record.carId) && fresh.carId) record.carId = fresh.carId;
+  if (blank(record.zsb) && fresh.zsb) record.zsb = fresh.zsb;
+  if (blank(record.errorCode) && fresh.errorCode) record.errorCode = fresh.errorCode;
+  record.comment = preferLonger(record.comment ?? '', fresh.comment) || null;
+
+  if (wasOpen && fresh.reworked) record.reworked = new Date(fresh.reworked);
+  if (blank(record.qualityControlDate) && fresh.qualityControlDate) {
+    record.qualityControlDate = new Date(fresh.qualityControlDate);
+  }
+
+  const detailOnly = [
+    'defectShift',
+    'detectShift',
+    'defectBy',
+    'partType',
+    'partName',
+    'description',
+    'qualityGate',
+  ] as const;
+  for (const key of detailOnly) {
+    const incoming = fresh[key];
+    if (!blank(incoming)) record[key] = incoming as string;
+  }
+
+  return { closedNow: wasOpen && !blank(record.reworked) };
+}
+
+/** Everything that identifies one error-code row; the site gives them no id. */
+export interface ErrorCodeRowLike {
+  code: string;
+  description: string | null;
+  errorProducer: string | null;
+  partType: string | null;
+  partName: string | null;
+  cavity: string | null;
+  info: string | null;
+}
+
+const errorCodeKey = (row: ErrorCodeRowLike) =>
+  [row.code, row.description, row.errorProducer, row.partType, row.partName, row.cavity, row.info]
+    .map((value) => (value ?? '').trim())
+    .join('');
+
+/**
+ * Re-syncs a record's error-code rows against its detail page.
+ *
+ * These rows are NOT write-once. The rework application lets an operator add
+ * error codes after registration (system manual §3.3) and replace the main one
+ * during Rework Out, where "all of the information will be replaced with the
+ * new modified data" (§4.2). An earlier version froze the list after the first
+ * successful fetch, so every code added while the harness was being repaired
+ * was lost.
+ *
+ *  - rows already stored are reused as-is, keeping their row identity;
+ *  - rows new on the page are created via `create`;
+ *  - rows the page no longer lists are dropped;
+ *  - a page with NO rows never wipes what is stored — a parse miss must not
+ *    delete real defects.
+ */
+export function syncErrorCodes<T extends ErrorCodeRowLike>(
+  stored: T[] | undefined,
+  fresh: RemoteErrorCodeRow[],
+  create: (row: RemoteErrorCodeRow) => T,
+): T[] {
+  const existing = stored ?? [];
+  if (fresh.length === 0) return existing;
+
+  const byKey = new Map(existing.map((row) => [errorCodeKey(row), row]));
+  return fresh.map((row) => byKey.get(errorCodeKey(row)) ?? create(row));
 }

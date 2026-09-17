@@ -91,9 +91,34 @@ export class KskRecord {
   @Column({ name: 'quality_gate', nullable: true })
   qualityGate: string | null;
 
+  /**
+   * When the detail page was last fetched SUCCESSFULLY. Null means the record
+   * is known only from the list page (e.g. just backfilled) — its status and
+   * duration are not real yet, so the API hides it until this is set.
+   */
+  @Index()
+  @Column({ name: 'detail_fetched_at', type: DATE_COLUMN_TYPE, nullable: true })
+  detailFetchedAt: Date | null;
+
+  /**
+   * When the detail page was last ATTEMPTED, success or not. Drives re-check
+   * spacing and retry back-off, so one record that keeps failing cannot
+   * monopolise every detail cycle.
+   */
+  @Column({ name: 'detail_checked_at', type: DATE_COLUMN_TYPE, nullable: true })
+  detailCheckedAt: Date | null;
+
+  /**
+   * `orphanedRowAction: 'delete'` so a code the site no longer lists is removed
+   * rather than left behind: operators can replace the main error code during
+   * Rework Out (rework system manual §4.2). Safe because the relation is eager
+   * — a loaded record always carries its current rows — and because the
+   * scraper never overwrites this list from an empty page (see syncErrorCodes).
+   */
   @OneToMany(() => ErrorCodeEntry, (entry) => entry.kskRecord, {
     cascade: true,
     eager: true,
+    orphanedRowAction: 'delete',
   })
   errorCodes: ErrorCodeEntry[];
 
@@ -101,10 +126,20 @@ export class KskRecord {
   status: KskStatus;
   week: string;
   durationMinutes: number;
+  /**
+   * Repaired but not yet released by the quality worker.
+   *
+   * The rework system has three stages: Rework In (registered) → Rework Out
+   * (reworked) → Quality Control, which is what actually closes the Rework ID
+   * (manual §5). `status` stays two-valued because the repair is what the
+   * duration measures, but a harness in this state is not released yet.
+   */
+  awaitingQualityControl: boolean;
 
   @AfterLoad()
   computeDerived(): void {
     this.status = this.reworked ? 'Terminé' : 'En cours';
+    this.awaitingQualityControl = this.reworked !== null && this.qualityControlDate === null;
     this.week = getIsoWeekLabel(new Date(this.registered));
     const end = this.reworked ? new Date(this.reworked) : new Date();
     this.durationMinutes = Math.max(

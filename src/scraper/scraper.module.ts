@@ -8,6 +8,7 @@ import { ScrapeState } from './entities/scrape-state.entity';
 import { LiveHttpSource } from './live/live-http.source';
 import { MockRemoteSource } from './mock/mock-remote.source';
 import { REMOTE_SOURCE } from './remote-source.interface';
+import { ScraperStatusService } from './scraper-status.service';
 import { ScraperController } from './scraper.controller';
 import { ScraperGateway } from './scraper.gateway';
 import { ScraperScheduler } from './scraper.scheduler';
@@ -21,6 +22,7 @@ import { ScraperService } from './scraper.service';
   ],
   controllers: [ScraperController],
   providers: [
+    ScraperStatusService,
     ScraperService,
     ScraperScheduler,
     ScraperGateway,
@@ -29,8 +31,8 @@ import { ScraperService } from './scraper.service';
     LiveHttpSource,
     {
       // SCRAPER_MODE=mock (default) -> MockRemoteSource, fake in-memory data.
-      // SCRAPER_MODE=live           -> LiveHttpSource, real Axios+Cheerio
-      //                                calls against SITE_BASE_URL.
+      // SCRAPER_MODE=live           -> LiveHttpSource, real HTTP against
+      //                                SITE_BASE_URL, parsed by site-parsers.ts.
       provide: REMOTE_SOURCE,
       useFactory: (config: ConfigService, mock: MockRemoteSource, live: LiveHttpSource) =>
         config.get<string>('SCRAPER_MODE', 'mock') === 'live' ? live : mock,

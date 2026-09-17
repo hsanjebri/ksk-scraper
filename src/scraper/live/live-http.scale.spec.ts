@@ -31,13 +31,15 @@ describe('list parser at scale, against real captured HTML', () => {
     }
   });
 
-  it('returns rows newest-first, which fastScan depends on', () => {
-    // fastScan takes rows[0] as the newest No. on a first run; if the page
-    // ordering were reversed it would ingest the oldest record and then
-    // treat the entire backlog as "already seen".
-    const numbers = rows.map((r) => Number(r.no));
-    for (let i = 1; i < numbers.length; i++) {
-      expect(numbers[i - 1]).toBeGreaterThan(numbers[i]);
+  it('returns rows newest REGISTERED first — the page does not sort by No.', () => {
+    // An earlier version of this test asserted strictly descending No. and
+    // claimed the scanner depended on it. It held for this 44-row MCM sample
+    // by coincidence; the full MAM page has 66 places where a higher No. sits
+    // below a lower one. The scanner now never relies on row order (scan.ts).
+    for (let i = 1; i < rows.length; i++) {
+      expect(new Date(rows[i - 1].registered).getTime()).toBeGreaterThanOrEqual(
+        new Date(rows[i].registered).getTime(),
+      );
     }
   });
 

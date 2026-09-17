@@ -6,23 +6,24 @@ import { useMemo, useState } from 'react'
 type SortKey = 'team' | 'count' | 'avgDurationMinutes' | 'openRatePct'
 
 const COLUMNS: { key: SortKey; label: string; numeric: boolean }[] = [
-  { key: 'team', label: 'Recorded by', numeric: false },
-  { key: 'count', label: 'Records', numeric: true },
-  { key: 'avgDurationMinutes', label: 'Avg duration', numeric: true },
+  { key: 'team', label: 'Error producer', numeric: false },
+  { key: 'count', label: 'Defects caused', numeric: true },
+  { key: 'avgDurationMinutes', label: 'Avg repair time', numeric: true },
   { key: 'openRatePct', label: 'Still open', numeric: true },
 ]
 
 /**
- * Rework volume and speed by the person/team who recorded the defect.
+ * Where defects come from, by the team the operator named as their origin.
+ *
+ * The source field is the rework application's "Error producer", defined in
+ * the system manual (§3.2) as "who made defect" — so these rows say where the
+ * defect was CAUSED, not who repaired it and not who typed it in. The repair
+ * time beside it belongs to the record, not to this team's work.
  *
  * A bar chart was the obvious choice and is the wrong one: colouring bars
  * darker-where-bigger on nominal categories double-encodes length as hue and
  * burns the only free channel. Four numbers per row also read faster in a
  * table than across four charts — and it sorts.
- *
- * Note this is "recorded by", not "responsible for". Treating it as a
- * performance ranking of people would be reading far more into the field than
- * it supports.
  */
 export function TeamPerformance({ rows }: { rows: TeamRow[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('count')

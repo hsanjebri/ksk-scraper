@@ -13,6 +13,40 @@ const BASE_HEADERS: HeadersInit = {
   'ngrok-skip-browser-warning': '1',
 }
 
+/** GET /records/status — scraper health and first-sync progress. */
+export interface ScraperStatus {
+  mode: 'live' | 'mock'
+  startedAt: string
+  charset: string | null
+  lists: Record<string, { lastScanAt: string | null; rowsOnPage: number; lastError: string | null }>
+  detail: {
+    fetched: number
+    failed: number
+    durationMs: number
+    lastCycleAt: string | null
+    lastError: string | null
+    totalFetched: number
+    totalFailed: number
+  }
+  counts: {
+    total: number
+    /** Detail page fetched — visible on the dashboard. */
+    ready: number
+    /** Known from the list page only — still being fetched, hidden. */
+    pending: number
+    open: number
+    byModel: Record<string, { total: number; pending: number }>
+  }
+}
+
+export async function fetchStatus(): Promise<ScraperStatus> {
+  const response = await fetch(new URL('/records/status', API_URL), { headers: BASE_HEADERS })
+  if (!response.ok) {
+    throw new Error(`GET /records/status failed: ${response.status} ${response.statusText}`)
+  }
+  return (await response.json()) as ScraperStatus
+}
+
 export async function fetchRecords(model?: string): Promise<KskRecord[]> {
   const url = new URL('/records', API_URL)
   if (model && model !== 'ALL') url.searchParams.set('model', model)

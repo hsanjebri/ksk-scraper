@@ -44,4 +44,10 @@ export interface KskRecord {
   status: KskStatus
   week: string
   durationMinutes: number
+  /**
+   * Repaired but not yet released by the quality worker. The rework system has
+   * three stages — Rework In, Rework Out, Quality Control — and only the last
+   * one closes the Rework ID (system manual §5).
+   */
+  awaitingQualityControl: boolean
 }

@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { IsNull, Repository } from 'typeorm';
 import { KSK_MODELS } from './constants';
 import { KskRecord } from './entities/ksk-record.entity';
 import { ScrapeState } from './entities/scrape-state.entity';
@@ -9,12 +9,12 @@ import { MockRemoteSource } from './mock/mock-remote.source';
 import { ScraperService } from './scraper.service';
 
 /**
- * Populates the database with ~30 fake KskRecords (mix of "En cours" and
- * "Terminé") on first startup, so the dashboard, watch-list, and WebSocket
- * events all have something to show before any real scanning has run.
+ * Populates the database with fake KskRecords on first startup in mock mode,
+ * so the dashboard, watch-list and WebSocket events have something to show.
  *
- * Only runs when SCRAPER_MODE=mock (the default). Skipped entirely in
- * live mode — you don't want fake records mixed in with real factory data.
+ * Only runs when SCRAPER_MODE=mock (the default). Live mode never seeds, and
+ * uses its own database file (see app.module.ts) so mock records can never
+ * end up mixed in with real factory data.
  */
 @Injectable()
 export class ScraperSeedService implements OnApplicationBootstrap {
@@ -38,6 +38,17 @@ export class ScraperSeedService implements OnApplicationBootstrap {
 
     const existing = await this.recordRepo.count();
     if (existing > 0) {
+      // Mock records are always complete. Databases created before detail
+      // tracking existed have these columns null, which would hide every
+      // record from the API — mark them as fetched.
+      const now = new Date();
+      const result = await this.recordRepo.update(
+        { detailFetchedAt: IsNull() },
+        { detailFetchedAt: now, detailCheckedAt: now },
+      );
+      if (result.affected) {
+        this.logger.log(`Marked ${result.affected} existing mock record(s) as detail-complete.`);
+      }
       this.logger.log(`Skipping seed — ${existing} record(s) already in DB.`);
       return;
     }
@@ -52,6 +63,8 @@ export class ScraperSeedService implements OnApplicationBootstrap {
 
       for (const remote of remoteRecords) {
         const entity = this.scraperService.mapRemoteToEntity(remote);
+        entity.detailFetchedAt = new Date();
+        entity.detailCheckedAt = new Date();
         await this.recordRepo.save(entity);
         if (newestNo === null || Number(remote.no) > Number(newestNo)) {
           newestNo = remote.no;

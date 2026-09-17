@@ -2,6 +2,7 @@ import { DurationHistogram } from '@/components/charts/DurationHistogram'
 import { ShiftComparison } from '@/components/charts/ShiftComparison'
 import { StatusOverTime } from '@/components/charts/StatusOverTime'
 import { TeamPerformance } from '@/components/charts/TeamPerformance'
+import { QualityControlQueue } from '@/components/overview/QualityControlQueue'
 import { ChartCard } from '@/components/ui/ChartCard'
 import { Card, CardHeader } from '@/components/ui/primitives'
 import { Reveal } from '@/components/ui/Reveal'
@@ -127,23 +128,28 @@ export function ReworkAnalysis() {
       <Reveal index={3}>
         <Card className="card-lift flex flex-col">
           <CardHeader
-            title="Recorded by"
-            subtitle="Volume and speed per person recording the defect · click a header to sort"
+            title="Defect origin"
+            subtitle="Defects per error producer — the team named as the source · click a header to sort"
           />
           {loading ? (
             <div className="px-5 pb-5 text-xs text-ink-muted">Loading…</div>
           ) : teams.length === 0 ? (
             <div className="px-5 pb-5 text-xs text-ink-muted">
-              No “defect by” values in the current selection.
+              No “error producer” values in the current selection.
             </div>
           ) : (
             <TeamPerformance rows={teams} />
           )}
           <p className="px-5 pb-4 text-[0.6875rem] text-ink-muted">
-            This is who <em>recorded</em> the defect, not who caused it — the source field
-            doesn’t support reading it as individual performance.
+            The site’s “error producer” field is defined as who <em>made</em> the defect
+            (rework system manual §3.2). It is entered by the operator at registration, so
+            read it as the reported origin — not as a performance ranking of people.
           </p>
         </Card>
+      </Reveal>
+
+      <Reveal index={4}>
+        <QualityControlQueue records={records} loading={loading} />
       </Reveal>
 
       <div className="xl:col-span-2">

@@ -20,6 +20,8 @@ const COLUMNS = [
   'ZSB',
   'Registered',
   'Reworked',
+  // The stage that actually releases the harness — rework system manual §5.
+  'Quality control',
   'Status',
   'Duration',
   'Error code',
@@ -28,7 +30,7 @@ const COLUMNS = [
   'Quality gate',
   'Defect shift',
   'Detect shift',
-  'Recorded by',
+  'Error producer',
   'Comment',
 ]
 
@@ -72,6 +74,7 @@ export function Reports() {
         r.zsb,
         shortDateTime(r.registered),
         r.reworked ? shortDateTime(r.reworked) : '',
+        r.qualityControlDate ? shortDateTime(r.qualityControlDate) : '',
         r.status,
         duration(elapsedMinutes(r)),
         r.errorCode ?? '',

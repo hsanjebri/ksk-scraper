@@ -1,14 +1,20 @@
-import { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
-import { mergeListAndDetail } from './merge';
+import {
+  EnrichableRecord,
+  ErrorCodeRowLike,
+  enrichWithDetail,
+  mergeListAndDetail,
+  syncErrorCodes,
+} from './merge';
+import { RemoteDetailRecord, RemoteErrorCodeRow, RemoteListRow } from './mock/mock-data.generator';
 
 /**
  * These pin the single most dangerous failure mode in the whole scraper.
  *
- * The list parser is verified against real server bytes; the detail parser is
- * not. If a record were rebuilt from the detail page alone and that page
- * failed to parse, every field would come back blank and `registered` would
- * fall back to "now" — quietly rewriting every timestamp to today and
- * destroying week bucketing and every duration on the dashboard.
+ * If a record were rebuilt from a detail page alone and that page failed to
+ * parse (or came back partial), every field would come back blank and
+ * `registered` would be lost — quietly moving records into the wrong week and
+ * destroying every duration on the dashboard. The list row is authoritative;
+ * the detail page only ever adds to it.
  */
 const LIST_ROW: RemoteListRow = {
   no: '2947',
@@ -167,5 +173,196 @@ describe('mergeListAndDetail', () => {
       );
       expect(merged.comment).toBe(full);
     });
+  });
+});
+
+/**
+ * enrichWithDetail runs on records that are already stored: first to complete
+ * a list-only backfilled record, then again on every re-check while it stays
+ * open. It has to be safe to repeat.
+ */
+describe('enrichWithDetail', () => {
+  const listOnly = (): EnrichableRecord => ({
+    carId: '006305803C',
+    zsb: '006305803C00',
+    errorCode: '510',
+    comment: 'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n12',
+    reworked: null,
+    qualityControlDate: null,
+    defectShift: null,
+    detectShift: null,
+    defectBy: null,
+    partType: null,
+    partName: null,
+    description: null,
+    qualityGate: null,
+  });
+
+  const detail: RemoteDetailRecord = {
+    ...EMPTY_DETAIL,
+    carId: '006305803C',
+    reworked: new Date(2026, 8, 17, 11, 26, 59).toISOString(),
+    qualityControlDate: new Date(2026, 8, 17, 11, 27, 13).toISOString(),
+    defectShift: 'B',
+    detectShift: 'B',
+    defectBy: 'Team2',
+    partType: 'connecteur',
+    partName: 'A126*1-B_V1',
+    description: 'incorrecte connecteur',
+    qualityGate: 'EOL Electrical test',
+    comment: 'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n125*1-b-v1 v32+33',
+  };
+
+  it('completes a list-only record and reports that it closed', () => {
+    const record = listOnly();
+    const { closedNow } = enrichWithDetail(record, detail);
+
+    expect(closedNow).toBe(true);
+    expect(record.reworked).toEqual(new Date(2026, 8, 17, 11, 26, 59));
+    expect(record.qualityGate).toBe('EOL Electrical test');
+    expect(record.defectShift).toBe('B');
+    expect(record.comment).toBe(detail.comment); // full text replaces the stump
+  });
+
+  it('reports closedNow only once, not on every later re-check', () => {
+    const record = listOnly();
+    enrichWithDetail(record, detail);
+    expect(enrichWithDetail(record, detail).closedNow).toBe(false);
+  });
+
+  it('never re-opens a closed record when a later poll comes back without a timestamp', () => {
+    const record = listOnly();
+    enrichWithDetail(record, detail);
+    enrichWithDetail(record, { ...EMPTY_DETAIL, reworked: null });
+    expect(record.reworked).toEqual(new Date(2026, 8, 17, 11, 26, 59));
+  });
+
+  it('does not let a partial page erase what an earlier poll found', () => {
+    const record = listOnly();
+    enrichWithDetail(record, detail);
+    enrichWithDetail(record, EMPTY_DETAIL);
+
+    expect(record.qualityGate).toBe('EOL Electrical test');
+    expect(record.partName).toBe('A126*1-B_V1');
+    expect(record.defectBy).toBe('Team2');
+    expect(record.comment).toBe(detail.comment);
+  });
+
+  it('keeps an open record open and says so', () => {
+    const record = listOnly();
+    const { closedNow } = enrichWithDetail(record, { ...detail, reworked: null, qualityControlDate: null });
+    expect(closedNow).toBe(false);
+    expect(record.reworked).toBeNull();
+    expect(record.qualityGate).toBe('EOL Electrical test');
+  });
+
+  it('keeps list-owned identifiers, filling them from detail only when blank', () => {
+    const record = { ...listOnly(), carId: '', errorCode: '510' };
+    enrichWithDetail(record, { ...detail, errorCode: '999' });
+    expect(record.carId).toBe('006305803C');
+    expect(record.errorCode).toBe('510');
+  });
+});
+
+/**
+ * The rework system manual is explicit that error-code rows change after
+ * registration: operators add codes for an existing Rework ID (§3.3) and can
+ * replace the main one during Rework Out, where "all of the information will be
+ * replaced with the new modified data" (§4.2).
+ *
+ * An earlier version attached these rows once and then never touched them
+ * again, so every code added while the harness was being repaired was lost —
+ * exactly the codes that describe what was actually wrong.
+ */
+describe('syncErrorCodes', () => {
+  const row = (over: Partial<RemoteErrorCodeRow> = {}): RemoteErrorCodeRow => ({
+    code: '510',
+    description: 'incorrecte connecteur',
+    errorProducer: 'Team2',
+    partType: 'connecteur',
+    partName: 'A126*1-B_V1',
+    cavity: '32',
+    info: 'inversion enter deux connecteur',
+    ...over,
+  });
+
+  /** Stands in for the entity: carries a row id the DB assigned. */
+  interface StoredRow extends ErrorCodeRowLike {
+    id?: number;
+  }
+  let created = 0;
+  const create = (source: RemoteErrorCodeRow): StoredRow => {
+    created += 1;
+    return { ...source };
+  };
+  beforeEach(() => {
+    created = 0;
+  });
+
+  const stored = (over: Partial<StoredRow> = {}): StoredRow => ({ ...row(), id: 1, ...over });
+
+  it('attaches the rows of a record that had none', () => {
+    const result = syncErrorCodes<StoredRow>([], [row(), row({ code: '500', cavity: '4' })], create);
+    expect(result.map((r) => r.code)).toEqual(['510', '500']);
+    expect(created).toBe(2);
+  });
+
+  it('adds a code inserted during the rework without touching the existing row', () => {
+    const existing = stored();
+    const result = syncErrorCodes<StoredRow>(
+      [existing],
+      [row(), row({ code: '140', description: 'fil coupe', cavity: 'Not applicable' })],
+      create,
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toBe(existing); // same row, same id — no churn
+    expect(result[1].code).toBe('140');
+    expect(created).toBe(1);
+  });
+
+  it('is idempotent — re-checking an unchanged page creates nothing', () => {
+    const existing = [stored(), stored({ id: 2, code: '500', cavity: '4' })];
+    const result = syncErrorCodes<StoredRow>(existing, [row(), row({ code: '500', cavity: '4' })], create);
+    expect(result).toEqual(existing);
+    expect(created).toBe(0);
+  });
+
+  it('drops a row the page no longer lists, so a replaced code disappears', () => {
+    const result = syncErrorCodes<StoredRow>(
+      [stored(), stored({ id: 2, code: '500' })],
+      [row({ code: '151', description: 'pas de continuite' })],
+      create,
+    );
+    expect(result.map((r) => r.code)).toEqual(['151']);
+  });
+
+  it('treats a modified field as a different row', () => {
+    // §4.2 replaces the data in place; the row we stored is no longer accurate.
+    const result = syncErrorCodes<StoredRow>(
+      [stored()],
+      [row({ description: 'connecteur casse' })],
+      create,
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('connecteur casse');
+    expect(created).toBe(1);
+  });
+
+  it('never wipes stored rows when the page comes back with none', () => {
+    // A parse miss or a partial page must not delete real defect data.
+    const existing = [stored()];
+    expect(syncErrorCodes<StoredRow>(existing, [], create)).toBe(existing);
+    expect(created).toBe(0);
+  });
+
+  it('ignores whitespace differences between two renders of the same row', () => {
+    const result = syncErrorCodes<StoredRow>(
+      [stored()],
+      [row({ code: '510 ', info: ' inversion enter deux connecteur ' })],
+      create,
+    );
+    expect(created).toBe(0);
+    expect(result[0].id).toBe(1);
   });
 });

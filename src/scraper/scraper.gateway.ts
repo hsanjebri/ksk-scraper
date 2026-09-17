@@ -27,4 +27,14 @@ export class ScraperGateway {
     this.logger.debug(`record.closed -> ${record.model} #${record.no}`);
     this.server.emit('record.closed', record);
   }
+
+  /**
+   * "Many records changed — refetch." Used instead of per-record events while
+   * history is being enriched: thousands of individual record.new events would
+   * make every connected dashboard re-render thousands of times.
+   */
+  emitRefresh(): void {
+    this.logger.debug('records.refresh');
+    this.server.emit('records.refresh');
+  }
 }

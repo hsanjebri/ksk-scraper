@@ -24,5 +24,9 @@ files/
 extracted data and frommohamed conv/
 captured/
 *.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.db
 *.zip
+# pages the live scraper dumps when parsing fails — real plant data
+debug/
