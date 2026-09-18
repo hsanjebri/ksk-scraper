@@ -16,7 +16,7 @@ title SEBN TN3 - Rework Live Sync
 
 REM Le secret doit etre le meme que SYNC_SECRET sur le serveur.
 REM Remplacez la valeur ci-dessous par celle qui vous a ete communiquee.
-set SYNC_SECRET=CHANGEME-mettre-le-meme-secret-que-sur-railway
+set SYNC_SECRET=cde5c92431ce64d083e326af2a38ae51a0b38e0c655e4e80
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0live-sync.ps1"
 

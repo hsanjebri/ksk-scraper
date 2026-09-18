@@ -13,7 +13,8 @@ async function bootstrap() {
   // The plant agent posts whole pages: the real results page is ~700 KB, about
   // 1 MB once base64-encoded, against Express's 100 KB default. Gzipped bodies
   // are inflated first, so this limit applies to the decompressed size.
-  app.useBodyParser('json', { limit: '24mb' });
+  app.useBodyParser('json', { limit: '50mb' });
+  app.useBodyParser('urlencoded', { limit: '50mb', extended: true });
 
   app.enableCors({ origin: '*' });
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
