@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DB_DRIVER } from '../database.config';
 
 export interface ListScanStatus {
   lastScanAt: string | null;
@@ -85,6 +86,28 @@ export class ScraperStatusService {
       // Null unless a plant-side agent is pushing pages (relay mode).
       agent: this.agent,
       detail: { ...this.detail, totalFetched: this.totals.fetched, totalFailed: this.totals.failed },
+      environment: this.environment(),
+    };
+  }
+
+  /**
+   * What configuration actually reached this process — names only, never
+   * values.
+   *
+   * Hosting dashboards show the variables that are SAVED, which is not always
+   * what a running container received (unapplied changes, a stale deployment,
+   * a stray space in a name). Listing the keys the process can see, JSON-
+   * encoded so an invisible character shows up as an escape, answers that from
+   * outside without exposing the secret or the database password.
+   */
+  private environment() {
+    const relevant = Object.keys(process.env)
+      .filter((key) => /scraper|sync|db_|database/i.test(key))
+      .sort();
+    return {
+      database: DB_DRIVER,
+      syncSecretConfigured: Boolean(this.config.get<string>('SYNC_SECRET')),
+      variableNames: relevant,
     };
   }
 }
