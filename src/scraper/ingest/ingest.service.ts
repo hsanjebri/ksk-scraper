@@ -84,13 +84,17 @@ export class IngestService {
     this.status.listScanned(payload.model, pageRows.length);
     this.status.agentSeen(payload.agent);
 
+    // The whole page is reconciled against what is actually stored, not just
+    // the rows above the watermark. The pushed page always carries the full
+    // history, so this costs a few indexed lookups — and a table that was
+    // emptied or lost rows while scrape_state kept its high-water mark heals
+    // on the next push instead of reporting "0 new" forever.
     const state = await this.scrapeStateRepo.findOne({ where: { model: payload.model } });
-    const selection = selectNewRows(pageRows, state?.lastSeenNo ?? null);
+    const selection = selectNewRows(pageRows, null);
 
-    let stored = 0;
-    if (selection.rows.length > 0) {
-      stored = await this.storeListOnly(payload.model, selection.rows);
-      if (selection.maxNo) await this.scraperService.markSeen(payload.model, selection.maxNo);
+    const stored = await this.storeListOnly(payload.model, selection.rows);
+    if (selection.maxNo && selection.maxNo !== state?.lastSeenNo) {
+      await this.scraperService.markSeen(payload.model, selection.maxNo);
     }
 
     return {
