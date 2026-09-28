@@ -1,3 +1,4 @@
+import { escapeHtml } from '@/lib/escape'
 import { useVizTokens } from '@/hooks/useDashboardData'
 import { EChart } from '@/lib/echarts'
 import type { Bucket } from '@/lib/metrics'
@@ -37,9 +38,10 @@ export function DefectsDonut({
         borderWidth: 1,
         padding: [8, 12],
         textStyle: { color: tokens.ink, fontSize: 12 },
+        // Rendered as innerHTML; the name is a scraped error code — escaped.
         formatter: (p: { name: string; value: number; percent: number }) =>
-          `<div style="font-weight:600;margin-bottom:2px">${p.name}</div>
-           <div style="color:${tokens.inkSecondary}">${p.value} defects · ${p.percent.toFixed(1)}%</div>`,
+          `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(p.name)}</div>
+           <div style="color:${tokens.inkSecondary}">${escapeHtml(p.value)} defects · ${escapeHtml(p.percent.toFixed(1))}%</div>`,
       },
       series: [
         {

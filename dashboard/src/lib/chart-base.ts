@@ -1,3 +1,4 @@
+import { escapeHtml, safeCssColor } from './escape'
 import type { VizTokens } from './viz-tokens'
 
 /**
@@ -22,25 +23,32 @@ export function baseTooltip(tokens: VizTokens, trigger: 'axis' | 'item' = 'axis'
   }
 }
 
-/** Renders a tooltip body as label/value rows with a colour key per series. */
+/**
+ * Renders a tooltip body as label/value rows with a colour key per series.
+ *
+ * ECharts inserts this string as innerHTML, and the header and labels are
+ * scraped text (part names, teams, error descriptions typed by operators), so
+ * every value is escaped here — once, for every chart that uses it.
+ */
 export function tooltipRows(
   tokens: VizTokens,
   header: string,
   rows: { label: string; value: string; color?: string }[],
 ): string {
   const body = rows
-    .map(
-      (row) => `
+    .map((row) => {
+      const color = safeCssColor(row.color)
+      return `
       <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:3px">
         <span style="display:flex;align-items:center;gap:6px;color:${tokens.inkSecondary}">
-          ${row.color ? `<span style="width:8px;height:8px;border-radius:2px;background:${row.color};display:inline-block"></span>` : ''}
-          ${row.label}
+          ${color ? `<span style="width:8px;height:8px;border-radius:2px;background:${color};display:inline-block"></span>` : ''}
+          ${escapeHtml(row.label)}
         </span>
-        <strong style="color:${tokens.ink}">${row.value}</strong>
-      </div>`,
-    )
+        <strong style="color:${tokens.ink}">${escapeHtml(row.value)}</strong>
+      </div>`
+    })
     .join('')
-  return `<div style="font-weight:600;margin-bottom:2px">${header}</div>${body}`
+  return `<div style="font-weight:600;margin-bottom:2px">${escapeHtml(header)}</div>${body}`
 }
 
 export function categoryAxis(tokens: VizTokens, data: string[], rotate = 0) {
