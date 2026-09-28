@@ -1,13 +1,45 @@
 import { Logger } from '@nestjs/common';
-import { WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import { OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
 import { Server } from 'socket.io';
+import { AuthService } from '../auth/auth.service';
 import { KskRecord } from './entities/ksk-record.entity';
 
-@WebSocketGateway({
-  cors: { origin: '*' },
-})
-export class ScraperGateway {
+/** Origins allowed to open the socket, from CORS_ORIGINS. Empty = any origin
+ *  holding a valid ticket (the ticket is the control; this is defence in depth). */
+const allowedOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+/**
+ * Live record events for signed-in dashboards only.
+ *
+ * Every handshake must carry a one-minute ticket from GET /auth/ws-ticket
+ * (which itself requires a session). Before this, any anonymous client could
+ * connect and receive every new and closed record.
+ *
+ * WebSocket transport only: the long-polling fallback is a cross-origin HTTP
+ * exchange that would need CORS opened up again.
+ */
+@WebSocketGateway({ cors: false, transports: ['websocket'] })
+export class ScraperGateway implements OnGatewayInit {
   private readonly logger = new Logger(ScraperGateway.name);
+
+  constructor(private readonly auth: AuthService) {}
+
+  afterInit(server: Server): void {
+    server.use((socket, next) => {
+      const origin = socket.handshake.headers.origin;
+      if (allowedOrigins.length > 0 && (!origin || !allowedOrigins.includes(origin))) {
+        return next(new Error('unauthorized'));
+      }
+      const ticket = (socket.handshake.auth as Record<string, unknown> | undefined)?.ticket;
+      const user = this.auth.verifyWsTicket(ticket);
+      if (!user) return next(new Error('unauthorized'));
+      (socket.data as Record<string, unknown>).user = user;
+      next();
+    });
+  }
 
   @WebSocketServer()
   server: Server;

@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Post, UseGuards } from '@nestjs/common';
+import { Public } from '../../auth/public.decorator';
 import { MAX_DETAIL_FETCH_PER_CYCLE } from '../constants';
 import { IngestService } from './ingest.service';
 import { parseDetailPayload, parseFailed, parseListPayload } from './ingest.payload';
@@ -16,6 +17,9 @@ import { SyncSecretGuard } from './sync-secret.guard';
  * Pages are sent as base64 of the raw bytes: the site declares no charset, so
  * decoding belongs here, next to the parsers that were tested against it.
  */
+// Public to the dashboard session check: the plant agent is not a dashboard
+// user. It is authenticated by SyncSecretGuard instead.
+@Public()
 @Controller('api/scraper/ingest')
 @UseGuards(SyncSecretGuard)
 export class IngestController {

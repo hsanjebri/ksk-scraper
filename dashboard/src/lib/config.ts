@@ -1,18 +1,26 @@
-export const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
+/**
+ * The API is reached through the dashboard's own origin at /api — a Vercel
+ * rewrite in production, the Vite proxy in development. Keeping it same-origin
+ * is what lets the session cookie be first-party, HttpOnly and SameSite=Strict
+ * instead of a third-party cookie that browsers block.
+ */
+export const API_BASE = '/api'
 
 /**
- * Sign-in for the dashboard screen.
- *
- * ⚠️ These values are compiled into the JavaScript bundle and are readable by
- * anyone who opens the browser's developer tools. They keep a passer-by off
- * the screen; they do not protect the data, because `GET /records` on the
- * backend answers without them. Override per deployment with
- * VITE_DASHBOARD_USER / VITE_DASHBOARD_PASSWORD.
+ * The live socket cannot go through that proxy (Vercel rewrites do not carry
+ * WebSockets), so it connects to the backend host directly, authenticated by
+ * a one-minute ticket. Empty = same origin (development, via the Vite proxy).
+ * VITE_API_URL is still honoured here so existing deployments keep working.
  */
-export const DASHBOARD_CREDENTIALS = {
-  user: (import.meta.env.VITE_DASHBOARD_USER ?? 'kskscrapper').toLowerCase(),
-  password: import.meta.env.VITE_DASHBOARD_PASSWORD ?? 'kskscrapper',
-}
+export const SOCKET_URL: string =
+  import.meta.env.VITE_SOCKET_URL ?? import.meta.env.VITE_API_URL ?? ''
+
+/**
+ * Generated demo data when the backend cannot be reached. Off unless set to
+ * "true": a production dashboard must say "unavailable", not show invented
+ * numbers that look real.
+ */
+export const ALLOW_DEMO = import.meta.env.VITE_ALLOW_DEMO === 'true'
 
 /**
  * ⚠️ ASSUMPTION — replace with a real production feed.

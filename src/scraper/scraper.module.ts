@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -21,6 +22,7 @@ import { ScraperService } from './scraper.service';
 
 @Module({
   imports: [
+    AuthModule,
     ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([KskRecord, ErrorCodeEntry, ScrapeState]),
   ],

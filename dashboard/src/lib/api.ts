@@ -1,16 +1,40 @@
 import type { KskRecord } from '@/types'
-import { API_URL } from './config'
+import { API_BASE } from './config'
+
+/** The session is missing or expired — the app should show the sign-in page. */
+export class UnauthorizedError extends Error {
+  constructor() {
+    super('Not signed in')
+  }
+}
+
+/** The backend answered with an error, or could not be reached at all. */
+export class ApiUnavailableError extends Error {}
 
 /**
- * Base headers for every API request.
- * `ngrok-skip-browser-warning` bypasses the ngrok free-tier interstitial page
- * that is injected for browser requests — without it the browser gets back an
- * HTML page with no CORS headers, and the request fails before the backend
- * is ever reached.
+ * Every call goes to the same origin, with the session cookie attached by the
+ * browser. The cookie is HttpOnly: this code never sees or stores it.
  */
-const BASE_HEADERS: HeadersInit = {
-  Accept: 'application/json',
-  'ngrok-skip-browser-warning': '1',
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      credentials: 'same-origin',
+      ...init,
+      headers: {
+        Accept: 'application/json',
+        ...(init.body ? { 'Content-Type': 'application/json' } : {}),
+        ...init.headers,
+      },
+    })
+  } catch {
+    throw new ApiUnavailableError('The server could not be reached')
+  }
+
+  if (response.status === 401) throw new UnauthorizedError()
+  if (!response.ok) throw new ApiUnavailableError(`${init.method ?? 'GET'} ${path} failed: ${response.status}`)
+  if (response.status === 204) return undefined as T
+  return (await response.json()) as T
 }
 
 /** GET /records/status — scraper health and first-sync progress. */
@@ -42,21 +66,38 @@ export interface ScraperStatus {
   }
 }
 
-export async function fetchStatus(): Promise<ScraperStatus> {
-  const response = await fetch(new URL('/records/status', API_URL), { headers: BASE_HEADERS })
-  if (!response.ok) {
-    throw new Error(`GET /records/status failed: ${response.status} ${response.statusText}`)
+export const fetchStatus = () => request<ScraperStatus>('/records/status')
+
+export const fetchRecords = () => request<KskRecord[]>('/records')
+
+export const fetchCurrentUser = () => request<{ user: string }>('/auth/me')
+
+export const fetchSocketTicket = () => request<{ ticket: string }>('/auth/ws-ticket')
+
+export type SignInOutcome = 'ok' | 'invalid' | 'locked' | 'unavailable'
+
+export async function signInRequest(username: string, password: string): Promise<SignInOutcome> {
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+  } catch {
+    return 'unavailable'
   }
-  return (await response.json()) as ScraperStatus
+  if (response.status === 204) return 'ok'
+  if (response.status === 401 || response.status === 400) return 'invalid'
+  if (response.status === 429) return 'locked'
+  return 'unavailable'
 }
 
-export async function fetchRecords(model?: string): Promise<KskRecord[]> {
-  const url = new URL('/records', API_URL)
-  if (model && model !== 'ALL') url.searchParams.set('model', model)
-
-  const response = await fetch(url, { headers: BASE_HEADERS })
-  if (!response.ok) {
-    throw new Error(`GET /records failed: ${response.status} ${response.statusText}`)
+export async function signOutRequest(): Promise<void> {
+  try {
+    await request('/auth/logout', { method: 'POST' })
+  } catch {
+    // The local state is cleared regardless; the cookie expires on its own.
   }
-  return (await response.json()) as KskRecord[]
 }

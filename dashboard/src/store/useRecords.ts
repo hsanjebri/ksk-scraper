@@ -1,5 +1,6 @@
-import { fetchRecords } from '@/lib/api'
-import { API_URL } from '@/lib/config'
+import { fetchRecords, fetchSocketTicket, UnauthorizedError } from '@/lib/api'
+import { ALLOW_DEMO, SOCKET_URL } from '@/lib/config'
+import { useAuth } from '@/store/useAuth'
 import {
   closeDemoRecord,
   generateDemoArrival,
@@ -82,14 +83,23 @@ export const useRecords = create<RecordsState>((set, get) => {
         // client-side so switching models is instant and doesn't refetch.
         const records = await fetchRecords()
         set({ records, loading: false, demo: false, lastUpdated: new Date() })
-      } catch {
+      } catch (error) {
+        // The session ended server-side (expired, revoked, secret rotated):
+        // back to the sign-in page, never to demo data.
+        if (error instanceof UnauthorizedError) {
+          set({ loading: false })
+          useAuth.getState().expire()
+          return
+        }
         // A background refresh that fails (backend restarting, network blip)
         // leaves the real records in place — never swap them for demo data.
         if (silent) return
-        // No backend reachable. That is the normal case for a public deploy —
-        // the real backend has to run inside the SEBN network and can never be
-        // exposed here — so fall back to generated data instead of showing an
-        // error page. The UI flags it clearly as demo data.
+        // Unreachable backend. In production that is an outage and must say
+        // so; generated data is only for development, when explicitly enabled.
+        if (!ALLOW_DEMO) {
+          set({ loading: false, error: 'The server could not be reached. The data shown may be out of date.' })
+          return
+        }
         set({
           records: generateDemoRecords(),
           loading: false,
@@ -107,9 +117,18 @@ export const useRecords = create<RecordsState>((set, get) => {
         return
       }
       if (socket) return
-      socket = io(API_URL, {
-        transports: ['websocket', 'polling'],
-        extraHeaders: { 'ngrok-skip-browser-warning': '1' },
+      // A fresh one-minute ticket for every (re)connect: the socket reaches
+      // the backend host directly and cannot carry the session cookie.
+      socket = io(SOCKET_URL || undefined, {
+        transports: ['websocket'],
+        auth: (callback) => {
+          fetchSocketTicket()
+            .then(({ ticket }) => callback({ ticket }))
+            .catch((error) => {
+              if (error instanceof UnauthorizedError) useAuth.getState().expire()
+              callback({})
+            })
+        },
       })
 
       const scheduleSilentReload = () => {

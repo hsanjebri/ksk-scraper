@@ -1,4 +1,5 @@
-import { fetchStatus, type ScraperStatus } from '@/lib/api'
+import { fetchStatus, UnauthorizedError, type ScraperStatus } from '@/lib/api'
+import { useAuth } from '@/store/useAuth'
 import { create } from 'zustand'
 
 interface SyncStatusState {
@@ -33,9 +34,14 @@ export const useSyncStatus = create<SyncStatusState>((set, get) => ({
     const tick = async () => {
       try {
         set({ status: await fetchStatus() })
-      } catch {
-        // An older backend without the endpoint, or a blip — keep the last
-        // known status rather than flashing the badge away.
+      } catch (error) {
+        // Session over: stop polling and return to sign-in.
+        if (error instanceof UnauthorizedError) {
+          running = false
+          useAuth.getState().expire()
+          return
+        }
+        // A blip — keep the last known status rather than flashing the badge.
       }
       if (!running) return
       const syncing = (get().status?.counts.pending ?? 0) > 0

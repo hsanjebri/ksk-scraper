@@ -7,15 +7,29 @@ import { Pareto } from '@/pages/Pareto'
 import { Reports } from '@/pages/Reports'
 import { Trends } from '@/pages/Trends'
 import { ReworkAnalysis } from '@/pages/ReworkAnalysis'
+import { ALLOW_DEMO } from '@/lib/config'
 import { useAuth } from '@/store/useAuth'
+import { useEffect } from 'react'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 export default function App() {
-  const signedIn = useAuth((s) => s.signedIn)
+  const status = useAuth((s) => s.status)
+  const check = useAuth((s) => s.check)
 
-  // Before the router, so no page mounts and no data is fetched until someone
-  // has signed in.
-  if (!signedIn) return <Login />
+  // Ask the server whether the session cookie is still valid.
+  useEffect(() => {
+    void check()
+  }, [check])
+
+  if (status === 'checking') {
+    return <div className="flex min-h-full items-center justify-center bg-plane text-xs text-ink-muted">Loading…</div>
+  }
+
+  // Before the router, so no page mounts and no data is fetched until the
+  // server has accepted the session. Demo mode (generated data, clearly
+  // labelled) is only reachable when explicitly enabled for development.
+  const demoOnly = status === 'unavailable' && ALLOW_DEMO
+  if (status !== 'signedIn' && !demoOnly) return <Login />
 
   return (
     <BrowserRouter>

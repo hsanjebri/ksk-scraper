@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { AuthModule } from './auth/auth.module';
 import { DB_DRIVER } from './database.config';
 import { ScraperModule } from './scraper/scraper.module';
 
@@ -75,6 +76,7 @@ import { ScraperModule } from './scraper/scraper.module';
         return sqlite;
       },
     }),
+    AuthModule,
     ScraperModule,
   ],
   controllers: [AppController],
