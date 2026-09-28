@@ -4,8 +4,8 @@ import {
   parseDetailPayload,
   parseFailed,
   parseListPayload,
-  secretMatches,
 } from './ingest.payload';
+import { computeSignature, NonceCache, parseKeys, verifySignedRequest } from './signature';
 
 const b64 = (text: string) => Buffer.from(text, 'latin1').toString('base64');
 /** The rejection message, or null when the payload was accepted. */
@@ -118,27 +118,106 @@ describe('ingest payload validation', () => {
     it('refuses pages that are not an array', () => {
       expect(errorOf(parseDetailPayload({ model: 'MAM', pages: page('1') }))).toMatch(/must be an array/);
     });
+
+    it('refuses fields outside the schema, at both levels', () => {
+      expect(errorOf(parseDetailPayload({ model: 'MAM', pages: [page('1')], debug: true }))).toMatch(/unexpected field "debug"/);
+      expect(errorOf(parseDetailPayload({ model: 'MAM', pages: [{ ...page('1'), sql: 'x' }] }))).toMatch(/unexpected field "sql" in a page/);
+    });
   });
 
-  describe('secretMatches', () => {
-    it('accepts only the exact secret', () => {
-      expect(secretMatches('s3cret-value', 's3cret-value')).toBe(true);
-      expect(secretMatches('s3cret-valuE', 's3cret-value')).toBe(false);
-      expect(secretMatches('s3cret-value ', 's3cret-value')).toBe(false);
-      expect(secretMatches('s3cret', 's3cret-value')).toBe(false);
+  describe('schema strictness', () => {
+    it('refuses unknown fields in a list push instead of ignoring them', () => {
+      const result = parseListPayload({ model: 'MAM', listBase64: b64('<html/>'), __proto__x: 1 })
+      expect(errorOf(result)).toMatch(/unexpected field/);
     });
+  });
+});
 
-    it('fails closed when the server has no secret configured', () => {
-      // Otherwise a fresh deployment would accept writes from anyone.
-      expect(secretMatches('anything', undefined)).toBe(false);
-      expect(secretMatches('', '')).toBe(false);
-      expect(secretMatches(undefined, undefined)).toBe(false);
-    });
+/**
+ * HMAC request signing for the plant collector. These pin what an attacker
+ * who can reach the public endpoint — or who captured one real request —
+ * is unable to do.
+ */
+describe('collector request signing', () => {
+  const KEY = 'k'.repeat(48);
+  const NOW = 1_790_000_000;
+  const body = Buffer.from('{"model":"MAM","listBase64":"PGh0bWwvPg=="}');
+  const sign = (over: Partial<{ timestamp: string; nonce: string; body: Buffer; key: string }> = {}) => {
+    const timestamp = over.timestamp ?? String(NOW);
+    const nonce = over.nonce ?? 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
+    const signed = over.body ?? body;
+    return {
+      timestamp,
+      nonce,
+      body: signed,
+      signature: computeSignature(over.key ?? KEY, timestamp, nonce, signed),
+    };
+  };
 
-    it('rejects a missing or non-string header', () => {
-      expect(secretMatches(undefined, 'secret')).toBe(false);
-      expect(secretMatches(['secret'], 'secret')).toBe(false);
-      expect(secretMatches(null, 'secret')).toBe(false);
-    });
+  it('accepts a correctly signed, fresh request', () => {
+    expect(verifySignedRequest(sign(), [KEY], new NonceCache(), NOW)).toBe('ok');
+  });
+
+  it('never needs the key on the wire', () => {
+    const request = sign();
+    expect(JSON.stringify({ ...request, body: request.body.toString() })).not.toContain(KEY);
+  });
+
+  it('refuses a request signed with another key', () => {
+    expect(verifySignedRequest(sign({ key: 'z'.repeat(48) }), [KEY], new NonceCache(), NOW)).toBe('bad-signature');
+  });
+
+  it('refuses a body changed after signing, even by one byte', () => {
+    const request = sign();
+    const tampered = Buffer.from(request.body.toString().replace('MAM', 'MCM'));
+    expect(verifySignedRequest({ ...request, body: tampered }, [KEY], new NonceCache(), NOW)).toBe('bad-signature');
+  });
+
+  it('refuses a replay of a captured request', () => {
+    const nonces = new NonceCache();
+    const request = sign();
+    expect(verifySignedRequest(request, [KEY], nonces, NOW)).toBe('ok');
+    expect(verifySignedRequest(request, [KEY], nonces, NOW + 10)).toBe('replayed');
+  });
+
+  it('refuses requests older or newer than five minutes', () => {
+    expect(verifySignedRequest(sign({ timestamp: String(NOW - 301) }), [KEY], new NonceCache(), NOW)).toBe('outside-time-window');
+    expect(verifySignedRequest(sign({ timestamp: String(NOW + 301) }), [KEY], new NonceCache(), NOW)).toBe('outside-time-window');
+    expect(verifySignedRequest(sign({ timestamp: String(NOW - 299) }), [KEY], new NonceCache(), NOW)).toBe('ok');
+  });
+
+  it('refuses a re-signed replay whose timestamp was moved — the signature covers it', () => {
+    const request = sign();
+    expect(verifySignedRequest({ ...request, timestamp: String(NOW + 5) }, [KEY], new NonceCache(), NOW)).toBe('bad-signature');
+  });
+
+  it('refuses missing and malformed headers without throwing', () => {
+    const nonces = new NonceCache();
+    expect(verifySignedRequest({ ...sign(), signature: undefined }, [KEY], nonces, NOW)).toBe('missing-headers');
+    expect(verifySignedRequest({ ...sign(), signature: 'zz' }, [KEY], nonces, NOW)).toBe('malformed-headers');
+    expect(verifySignedRequest({ ...sign(), nonce: 'short' }, [KEY], nonces, NOW)).toBe('malformed-headers');
+    expect(verifySignedRequest({ ...sign(), timestamp: 'yesterday' }, [KEY], nonces, NOW)).toBe('malformed-headers');
+    expect(verifySignedRequest({ ...sign(), body: { parsed: true } }, [KEY], nonces, NOW)).toBe('malformed-headers');
+  });
+
+  it('fails closed when no usable key is configured', () => {
+    expect(verifySignedRequest(sign(), [], new NonceCache(), NOW)).toBe('no-key-configured');
+    expect(parseKeys('too-short')).toEqual([]);
+    expect(parseKeys(undefined)).toEqual([]);
+  });
+
+  it('accepts either of two keys, so the key can be rotated without downtime', () => {
+    const next = 'n'.repeat(48);
+    const keys = parseKeys(`${KEY}, ${next}`);
+    expect(keys).toHaveLength(2);
+    expect(verifySignedRequest(sign({ key: next }), keys, new NonceCache(), NOW)).toBe('ok');
+  });
+
+  it('does not let an unsigned caller fill the replay cache', () => {
+    const nonces = new NonceCache();
+    const forged = { ...sign(), signature: 'f'.repeat(64) };
+    expect(verifySignedRequest(forged, [KEY], nonces, NOW)).toBe('bad-signature');
+    // The genuine request with that nonce still goes through.
+    expect(verifySignedRequest(sign(), [KEY], nonces, NOW)).toBe('ok');
   });
 });

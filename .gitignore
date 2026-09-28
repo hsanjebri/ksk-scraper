@@ -30,3 +30,11 @@ captured/
 *.zip
 # pages the live scraper dumps when parsing fails — real plant data
 debug/
+
+# Plant collector: the DPAPI-encrypted key and the local log never leave the PC
+live-sync.key
+live-sync.log
+live-sync.log.1
+# Screenshots of hosting consoles show secrets in clear — keep them out of git
+/capture*.png
+/*screenshot*.png

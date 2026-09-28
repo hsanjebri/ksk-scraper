@@ -86,8 +86,19 @@ export function decodeBase64Page(value: unknown, label: string): Parsed<Uint8Arr
   return { ok: true, value: new Uint8Array(bytes) };
 }
 
+/**
+ * Name of the first field outside the schema, or null. Unknown fields are
+ * refused rather than ignored: a payload that does not match what the agent
+ * sends is either a bug or someone probing, and neither should be accepted.
+ */
+function unknownField(value: Record<string, unknown>, allowed: readonly string[]): string | null {
+  return Object.keys(value).find((key) => !allowed.includes(key)) ?? null;
+}
+
 export function parseListPayload(body: unknown): Parsed<ListPayload> {
   if (!isRecord(body)) return { ok: false, error: 'body must be a JSON object' };
+  const extra = unknownField(body, ['model', 'listBase64', 'contentType', 'agent']);
+  if (extra) return { ok: false, error: `unexpected field "${extra.slice(0, 40)}"` };
 
   const model = asModel(body.model);
   if (!model) return { ok: false, error: `model must be one of ${KSK_MODELS.join(', ')}` };
@@ -108,6 +119,8 @@ export function parseListPayload(body: unknown): Parsed<ListPayload> {
 
 export function parseDetailPayload(body: unknown): Parsed<DetailPayload> {
   if (!isRecord(body)) return { ok: false, error: 'body must be a JSON object' };
+  const extra = unknownField(body, ['model', 'pages', 'agent']);
+  if (extra) return { ok: false, error: `unexpected field "${extra.slice(0, 40)}"` };
 
   const model = asModel(body.model);
   if (!model) return { ok: false, error: `model must be one of ${KSK_MODELS.join(', ')}` };
@@ -121,6 +134,8 @@ export function parseDetailPayload(body: unknown): Parsed<DetailPayload> {
   const pages: DetailPayload['pages'] = [];
   for (const entry of body.pages) {
     if (!isRecord(entry)) return { ok: false, error: 'each page must be an object' };
+    const extraInPage = unknownField(entry, ['no', 'base64', 'contentType']);
+    if (extraInPage) return { ok: false, error: `unexpected field "${extraInPage.slice(0, 40)}" in a page` };
     const no = typeof entry.no === 'string' ? entry.no.trim() : '';
     if (!/^\d{1,12}$/.test(no)) return { ok: false, error: `invalid record number "${String(entry.no)}"` };
 
@@ -131,21 +146,4 @@ export function parseDetailPayload(body: unknown): Parsed<DetailPayload> {
   }
 
   return { ok: true, value: { model, pages, agent: asOptionalString(body.agent) } };
-}
-
-/**
- * Constant-time-ish comparison of the shared secret.
- *
- * Compares every character regardless of where the first difference is, so the
- * time taken says nothing about how much of the secret was correct.
- */
-export function secretMatches(provided: unknown, expected: string | undefined): boolean {
-  if (!expected) return false; // fail closed: no secret configured, no ingest
-  if (typeof provided !== 'string' || provided.length !== expected.length) return false;
-
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
 }

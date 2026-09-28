@@ -1,40 +1,53 @@
 import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import { secretMatches } from './ingest.payload';
+import { NonceCache, parseKeys, verifySignedRequest } from './signature';
 
 /**
- * Guards the ingest endpoints with the shared secret from SYNC_SECRET.
+ * Authenticates the plant collector by HMAC signature (see signature.ts).
  *
- * These endpoints WRITE the quality data the dashboard reports, on a public
- * URL, so they are closed by default: with no SYNC_SECRET configured nothing
- * is accepted at all. The agent sends the secret in `x-sync-secret`.
+ * Runs before anything reads the body: main.ts gives this route a raw-bytes
+ * parser, so at this point the body is an unparsed Buffer.
+ *
+ * Every failure answers the same bare 401. The reason goes to the server log
+ * only — a caller probing the endpoint learns nothing about which check
+ * failed. The log never contains the key, the signature or the body.
  */
 @Injectable()
 export class SyncSecretGuard implements CanActivate {
   private readonly logger = new Logger(SyncSecretGuard.name);
-  private warnedMissing = false;
+  private readonly nonces = new NonceCache();
+  private warnedNoKey = false;
 
   constructor(private readonly config: ConfigService) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const expected = this.config.get<string>('SYNC_SECRET');
-    if (!expected) {
-      if (!this.warnedMissing) {
-        this.warnedMissing = true;
+    const request = context.switchToHttp().getRequest<Request>();
+    const keys = parseKeys(this.config.get<string>('SYNC_SECRET'));
+
+    const verdict = verifySignedRequest(
+      {
+        timestamp: request.header('x-sync-timestamp'),
+        nonce: request.header('x-sync-nonce'),
+        signature: request.header('x-sync-signature'),
+        body: request.body,
+      },
+      keys,
+      this.nonces,
+    );
+
+    if (verdict === 'ok') return true;
+
+    if (verdict === 'no-key-configured') {
+      if (!this.warnedNoKey) {
+        this.warnedNoKey = true;
         this.logger.error(
-          'SYNC_SECRET is not set — every ingest request will be rejected. ' +
-            'Set it on the server and in the plant agent.',
+          `SYNC_SECRET is not set, or shorter than 32 characters — every collector request is rejected.`,
         );
       }
-      throw new UnauthorizedException('ingest is not configured');
+    } else {
+      this.logger.warn(`Rejected collector request from ${request.ip ?? 'unknown'}: ${verdict}.`);
     }
-
-    const request = context.switchToHttp().getRequest<Request>();
-    if (!secretMatches(request.header('x-sync-secret'), expected)) {
-      this.logger.warn(`Rejected ingest from ${request.ip ?? 'unknown'}: bad or missing secret.`);
-      throw new UnauthorizedException('invalid sync secret');
-    }
-    return true;
+    throw new UnauthorizedException();
   }
 }
