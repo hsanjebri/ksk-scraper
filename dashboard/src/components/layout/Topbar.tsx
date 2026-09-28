@@ -2,6 +2,7 @@ import { useNow } from '@/hooks/useDashboardData'
 import { relativeTime } from '@/lib/format'
 import { modelsIn } from '@/lib/metrics'
 import { ALL_MODELS, useFilters } from '@/store/useFilters'
+import { useAuth } from '@/store/useAuth'
 import { useRecords } from '@/store/useRecords'
 import { useSyncStatus } from '@/store/useSyncStatus'
 import { useTheme, type ThemeMode } from '@/store/useTheme'
@@ -126,6 +127,25 @@ function BridgeBadge() {
   )
 }
 
+function SignOut() {
+  const user = useAuth((s) => s.user)
+  const signOut = useAuth((s) => s.signOut)
+
+  return (
+    <button
+      type="button"
+      onClick={signOut}
+      title={user ? `Signed in as ${user} — sign out` : 'Sign out'}
+      className="flex items-center gap-1.5 rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs font-medium text-ink-muted transition hover:text-ink-secondary"
+    >
+      <svg viewBox="0 0 20 20" className="size-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M8 17H4.5A1.5 1.5 0 0 1 3 15.5v-11A1.5 1.5 0 0 1 4.5 3H8M13 13l4-3-4-3M17 10H8" />
+      </svg>
+      <span className="hidden sm:inline">Sign out</span>
+    </button>
+  )
+}
+
 function ModelFilter() {
   const records = useRecords((s) => s.records)
   const model = useFilters((s) => s.model)
@@ -224,6 +244,7 @@ export function Topbar({ title, onMenu }: { title: string; onMenu: () => void })
             className="hidden h-8 w-auto rounded sm:block"
           />
           <ThemeToggle />
+          <SignOut />
         </div>
       </div>
     </header>

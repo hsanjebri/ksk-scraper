@@ -1,14 +1,22 @@
 import { Shell } from '@/components/layout/Shell'
 import { DefectsAnalysis } from '@/pages/DefectsAnalysis'
 import { Kpi } from '@/pages/Kpi'
+import { Login } from '@/pages/Login'
 import { Overview } from '@/pages/Overview'
 import { Pareto } from '@/pages/Pareto'
 import { Reports } from '@/pages/Reports'
 import { Trends } from '@/pages/Trends'
 import { ReworkAnalysis } from '@/pages/ReworkAnalysis'
+import { useAuth } from '@/store/useAuth'
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 export default function App() {
+  const signedIn = useAuth((s) => s.signedIn)
+
+  // Before the router, so no page mounts and no data is fetched until someone
+  // has signed in.
+  if (!signedIn) return <Login />
+
   return (
     <BrowserRouter>
       <Routes>
