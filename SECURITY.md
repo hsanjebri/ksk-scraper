@@ -45,7 +45,8 @@ plant PC (live-sync.ps1) ──HTTPS + HMAC──▶ API (Railway) ◀──/api
 - **Key storage on the plant PC**: entered once, then kept in `live-sync.key`,
   encrypted by Windows DPAPI for that account and PC. No key is ever written in
   a script.
-- **Rotation without downtime**: `SYNC_SECRET="old,new"`, switch the collector,
+- **Rotation**: `scripts/ops/rotate-railway-secrets.sh` regenerates all three
+  secrets on Railway in one go. Without downtime: `SYNC_SECRET="old,new"`, switch the collector,
   then remove the old key. Replacing the key is also the **kill switch** — the
   collector stops by itself after three refused requests.
 - **HTTPS only**: the collector refuses a non-HTTPS server address.
