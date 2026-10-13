@@ -10,8 +10,17 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: 'deps(api)'
+    ignore:
+      # A NestJS major is a migration (Express 5 and friends), done on purpose
+      # with every @nestjs package at once. A security update once bumped half
+      # of them to 12 and left the rest on 10, which cannot even install.
+      - dependency-name: '@nestjs/*'
+        update-types: ['version-update:semver-major']
     groups:
       nestjs:
+        patterns: ['@nestjs/*']
+      nestjs-security:
+        applies-to: security-updates
         patterns: ['@nestjs/*']
       api-minor-and-patch:
         update-types: [minor, patch]
