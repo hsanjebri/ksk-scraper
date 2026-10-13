@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { AppModule } from '../../app.module';
-import { KSK_MODELS, KskModel } from '../constants';
+import { KSK_MODELS } from '../constants';
 import { IngestService } from '../ingest/ingest.service';
 
 /**

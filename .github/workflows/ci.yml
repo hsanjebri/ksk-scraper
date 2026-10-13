@@ -1,0 +1,507 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  CI/CD — KSK rework scraper (NestJS API + React dashboard)
+#
+#   lint ──┬─────────────── test (Node 22, 24) ──┐
+#          └── build ── integration (Postgres) ──┴── docker ── deploy (main)
+#   audit ─────────────────────────────────────────────────────────┘
+#
+#  Every push and pull request runs the whole chain up to the Docker image.
+#  Only a push to main publishes the image and deploys to Railway.
+# ─────────────────────────────────────────────────────────────────────────────
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same PR makes the running pipeline obsolete. On main every
+# commit runs to the end, so a deploy is never cut off halfway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  PRODUCTION_URL: https://ksk-scraper-production.up.railway.app
+
+jobs:
+  # ───────────────────────────── Stage 1 · Quality ────────────────────────────
+  lint:
+    name: 🔍 Lint & type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: ESLint
+        # Correctness rules block the pipeline. Formatting is reported in the
+        # next-but-one step until the codebase has had one `npm run format` pass.
+        run: |
+          npx eslint "{src,test}/**/*.ts" --max-warnings 0 --rule 'prettier/prettier: off'
+
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Prettier (report only)
+        run: |
+          if ! npx prettier --check "src/**/*.ts" "test/**/*.ts" > prettier.txt 2>&1; then
+            count=$(grep -cE '^\[warn\] (src|test)/' prettier.txt || true)
+            echo "::warning title=Formatting::${count} file(s) are not Prettier-formatted — run npm run format"
+          fi
+
+  # ───────────────────────────── Stage 2 · Tests ──────────────────────────────
+  test:
+    name: 🧪 Unit tests · Node ${{ matrix.node }}
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['22', '24']
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      - name: Jest
+        run: >-
+          npx jest --ci --coverage
+          --coverageReporters=json-summary
+          --coverageReporters=lcov
+          --coverageReporters=text-summary
+
+      - name: Coverage summary
+        if: always() && matrix.node == env.NODE_VERSION
+        run: node scripts/ci/coverage-summary.mjs coverage/coverage-summary.json
+
+      - name: Upload coverage report
+        if: always() && matrix.node == env.NODE_VERSION
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  build:
+    name: 🏗️ Build · API + dashboard
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+
+      - name: Build API
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - name: Lint dashboard (oxlint)
+        working-directory: dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npx oxlint
+
+      - name: Build dashboard (tsc + Vite)
+        working-directory: dashboard
+        run: npm run build
+
+      - name: Bundle report
+        run: |
+          {
+            echo "### 📦 Dashboard bundle"
+            echo ""
+            echo "| Asset | Size | Gzipped |"
+            echo "|---|---:|---:|"
+            for f in dashboard/dist/assets/*.js dashboard/dist/assets/*.css; do
+              [ -f "$f" ] || continue
+              raw=$(stat -c%s "$f"); gz=$(gzip -c "$f" | wc -c)
+              printf '| `%s` | %s | %s |\n' "$(basename "$f")" \
+                "$(numfmt --to=iec --suffix=B "$raw")" "$(numfmt --to=iec --suffix=B "$gz")"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: api-dist
+          path: dist/
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dashboard-dist
+          path: dashboard/dist/
+          retention-days: 7
+
+  integration:
+    name: 🐘 Integration · API + PostgreSQL
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ksk_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_TYPE: postgres
+      DB_HOST: localhost
+      DB_PORT: '5432'
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: ksk_ci
+      SCRAPER_MODE: relay
+      PORT: '3000'
+      CI_USER: ci-bot
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # Production dependencies only, plus the compiled output of the build
+      # job: the same combination the Docker image runs.
+      - name: Install production dependencies
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: api-dist
+          path: dist
+
+      - name: Generate throwaway credentials
+        run: |
+          sync=$(openssl rand -hex 32)
+          session=$(openssl rand -hex 32)
+          password=$(openssl rand -hex 16)
+          echo "::add-mask::$sync"
+          echo "::add-mask::$session"
+          echo "::add-mask::$password"
+          hash=$(CI_PASSWORD="$password" node -e \
+            "require('./dist/auth/password.js').hashPassword(process.env.CI_PASSWORD).then(console.log)")
+          {
+            echo "SYNC_SECRET=$sync"
+            echo "SESSION_SECRET=$session"
+            echo "CI_PASSWORD=$password"
+            echo "DASHBOARD_USERS=${CI_USER}:${hash}"
+          } >> "$GITHUB_ENV"
+
+      - name: Start API
+        run: |
+          node dist/main.js > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "API answered after ${i}s"; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::API did not answer within 30 s"
+          cat server.log
+          exit 1
+
+      - name: Run integration suite
+        run: node scripts/ci/integration-test.mjs
+
+      - name: Server log
+        if: always()
+        run: cat server.log || true
+
+  # ─────────────────────────── Stage 3 · Package ──────────────────────────────
+  docker:
+    name: 🐳 Docker · build, scan, publish
+    needs: [test, integration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    outputs:
+      image: ${{ steps.ref.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=pr
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - id: ref
+        run: echo "image=${{ fromJSON(steps.meta.outputs.json).tags[0] }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Container smoke test
+        run: |
+          docker run -d --name api -p 3000:3000 \
+            -e SCRAPER_MODE=relay -e DB_TYPE=sqlite "${{ steps.ref.outputs.image }}"
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/ > /dev/null; then
+              echo "Container answered after ${i}s"; docker rm -f api > /dev/null; exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Container did not answer within 30 s"
+          docker logs api
+          exit 1
+
+      - name: Vulnerability scan (Trivy → Security tab)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload scan to GitHub Security
+        uses: github/codeql-action/upload-sarif@v4
+        # Fork PRs get a read-only token; the scan still ran above.
+        continue-on-error: true
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image
+
+      - name: Vulnerability summary
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ steps.ref.outputs.image }}
+          format: table
+          output: trivy.txt
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+          skip-setup-trivy: true
+
+      - name: Image report
+        run: |
+          size=$(docker image inspect "${{ steps.ref.outputs.image }}" --format '{{.Size}}' | numfmt --to=iec --suffix=B)
+          {
+            echo "### 🐳 Docker image"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image | \`${{ steps.ref.outputs.image }}\` |"
+            echo "| Size | ${size} |"
+            echo "| Published | ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && 'yes — GHCR' || 'no (not main)' }} |"
+            echo ""
+            echo "<details><summary>Trivy scan (HIGH / CRITICAL, fixable)</summary>"
+            echo ""
+            echo '```'
+            cat trivy.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+
+  audit:
+    name: 🛡️ Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: npm audit (production dependencies)
+        env:
+          AUDIT_FAIL_ON: none
+        run: node scripts/ci/audit-summary.mjs
+
+  dependency-review:
+    name: 🔎 Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
+        with:
+          # Blocks a PR that ADDS a high-severity advisory; existing ones are
+          # the audit job's business.
+          fail-on-severity: high
+
+  # ─────────────────────────── Stage 4 · Deliver ──────────────────────────────
+  deploy:
+    name: 🚀 Deploy · Railway
+    needs: [docker, audit]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ env.PRODUCTION_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    env:
+      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check credentials
+        id: creds
+        run: |
+          if [ -z "$RAILWAY_TOKEN" ]; then
+            echo "::notice title=Deploy skipped::Add a RAILWAY_TOKEN repository secret to deploy from this pipeline."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v7
+        if: steps.creds.outputs.enabled == 'true'
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Deploy to Railway
+        if: steps.creds.outputs.enabled == 'true'
+        run: npx -y @railway/cli@5 up --service ksk-scraper --ci
+
+      - name: Smoke test production
+        if: steps.creds.outputs.enabled == 'true'
+        run: |
+          # Up, and serving the version that requires sign-in: an anonymous
+          # read of the records must be refused.
+          for i in $(seq 1 18); do
+            live=$(curl -s -o /dev/null -w '%{http_code}' "$PRODUCTION_URL/")
+            data=$(curl -s -o /dev/null -w '%{http_code}' "$PRODUCTION_URL/records")
+            if [ "$live" = 200 ] && [ "$data" = 401 ]; then
+              {
+                echo "### 🚀 Production"
+                echo ""
+                echo "| Check | Result |"
+                echo "|---|---|"
+                echo "| \`GET /\` liveness | ✅ 200 |"
+                echo "| \`GET /records\` without session | ✅ 401 |"
+                echo "| Commit | \`${GITHUB_SHA::7}\` |"
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "Attempt $i: / → $live, /records → $data"
+            sleep 10
+          done
+          echo "::error::Production did not pass the smoke test (/ → $live, /records → $data)"
+          exit 1
+
+  # ─────────────────────────────── Report ─────────────────────────────────────
+  report:
+    name: 📋 Pipeline report
+    if: always()
+    needs: [lint, test, build, integration, docker, audit, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Summary
+        env:
+          LINT: ${{ needs.lint.result }}
+          TEST: ${{ needs.test.result }}
+          BUILD: ${{ needs.build.result }}
+          INTEGRATION: ${{ needs.integration.result }}
+          DOCKER: ${{ needs.docker.result }}
+          AUDIT: ${{ needs.audit.result }}
+          DEPLOY: ${{ needs.deploy.result }}
+        run: |
+          icon() {
+            case "$1" in
+              success) echo "✅ passed" ;;
+              failure) echo "❌ failed" ;;
+              cancelled) echo "⏹️ cancelled" ;;
+              skipped) echo "⏭️ skipped" ;;
+              *) echo "❔ $1" ;;
+            esac
+          }
+          {
+            echo "## 🏭 KSK Scraper — pipeline report"
+            echo ""
+            echo "Commit \`${GITHUB_SHA::7}\` · \`${GITHUB_REF_NAME}\` · ${GITHUB_EVENT_NAME} by @${GITHUB_ACTOR}"
+            echo ""
+            echo "| Stage | Job | Result |"
+            echo "|---|---|---|"
+            echo "| Quality | 🔍 Lint & type-check | $(icon "$LINT") |"
+            echo "| Tests | 🧪 Unit tests (Node 22, 24) | $(icon "$TEST") |"
+            echo "| Tests | 🏗️ Build API + dashboard | $(icon "$BUILD") |"
+            echo "| Tests | 🐘 Integration with PostgreSQL | $(icon "$INTEGRATION") |"
+            echo "| Package | 🐳 Docker build, scan, publish | $(icon "$DOCKER") |"
+            echo "| Security | 🛡️ Dependency audit | $(icon "$AUDIT") |"
+            echo "| Deliver | 🚀 Deploy to Railway | $(icon "$DEPLOY") |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # One stable check to require in branch protection, whatever the matrix.
+      - name: Gate
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
