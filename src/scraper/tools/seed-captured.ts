@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { readFileSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 import { AppModule } from '../../app.module';
-import { KSK_MODELS, KskModel } from '../constants';
+import { KSK_MODELS } from '../constants';
 import { IngestService } from '../ingest/ingest.service';
 
 /**
@@ -24,7 +24,9 @@ import { IngestService } from '../ingest/ingest.service';
  */
 async function main(): Promise<void> {
   const logger = new Logger('SeedCaptured');
-  const folder = resolve(process.argv[2] ?? join(process.cwd(), 'captured', 'captured'));
+  const folder = resolve(
+    process.argv[2] ?? join(process.cwd(), 'captured', 'captured'),
+  );
 
   // In mock mode the app seeds ~5,800 generated records into an empty database
   // on startup — including this one, right before the real pages land on top.
@@ -55,7 +57,9 @@ async function main(): Promise<void> {
 
   try {
     for (const model of KSK_MODELS) {
-      const listFile = files.find((name) => name.toLowerCase() === `list-${model.toLowerCase()}.html`);
+      const listFile = files.find(
+        (name) => name.toLowerCase() === `list-${model.toLowerCase()}.html`,
+      );
       if (!listFile) {
         logger.warn(`${model}: no list-${model}.html in ${folder} — skipped.`);
         continue;
@@ -83,7 +87,11 @@ async function main(): Promise<void> {
         bytes: new Uint8Array(readFileSync(join(folder, name))),
         contentType: null,
       }));
-      const applied = await ingest.ingestDetails({ model, pages, agent: 'captured-files' });
+      const applied = await ingest.ingestDetails({
+        model,
+        pages,
+        agent: 'captured-files',
+      });
       logger.log(
         `${model}: ${applied.applied} detail page(s) applied, ${applied.failed} rejected, ` +
           `${applied.pending} record(s) still waiting for one.`,

@@ -13,7 +13,10 @@ import type {
  */
 
 /** Prefers the list value; falls back to the detail page only when it's blank. */
-function preferList(listValue: string, detailValue: string | null | undefined): string {
+function preferList(
+  listValue: string,
+  detailValue: string | null | undefined,
+): string {
   return listValue && listValue.trim() ? listValue : (detailValue ?? '');
 }
 
@@ -26,7 +29,10 @@ function preferList(listValue: string, detailValue: string | null | undefined): 
  * truncated text forever, losing the end of two thirds of all defect
  * descriptions. So here the longer of the two wins.
  */
-function preferLonger(listValue: string, detailValue: string | null | undefined): string {
+function preferLonger(
+  listValue: string,
+  detailValue: string | null | undefined,
+): string {
   const fromDetail = detailValue ?? '';
   if (!listValue.trim()) return fromDetail;
   return fromDetail.length > listValue.length ? fromDetail : listValue;
@@ -95,7 +101,8 @@ export interface EnrichableRecord {
   qualityGate: string | null;
 }
 
-const blank = (value: unknown) => value === null || value === undefined || value === '';
+const blank = (value: unknown) =>
+  value === null || value === undefined || value === '';
 
 /**
  * Applies a (re-)fetched detail page to a record that is already stored.
@@ -123,7 +130,8 @@ export function enrichWithDetail(
 
   if (blank(record.carId) && fresh.carId) record.carId = fresh.carId;
   if (blank(record.zsb) && fresh.zsb) record.zsb = fresh.zsb;
-  if (blank(record.errorCode) && fresh.errorCode) record.errorCode = fresh.errorCode;
+  if (blank(record.errorCode) && fresh.errorCode)
+    record.errorCode = fresh.errorCode;
   record.comment = preferLonger(record.comment ?? '', fresh.comment) || null;
 
   if (wasOpen && fresh.reworked) record.reworked = new Date(fresh.reworked);
@@ -160,7 +168,15 @@ export interface ErrorCodeRowLike {
 }
 
 const errorCodeKey = (row: ErrorCodeRowLike) =>
-  [row.code, row.description, row.errorProducer, row.partType, row.partName, row.cavity, row.info]
+  [
+    row.code,
+    row.description,
+    row.errorProducer,
+    row.partType,
+    row.partName,
+    row.cavity,
+    row.info,
+  ]
     .map((value) => (value ?? '').trim())
     .join('');
 

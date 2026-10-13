@@ -1,11 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
-import { INLINE_DETAIL_LIMIT, KskModel, MAX_DETAIL_FETCH_PER_CYCLE } from '../constants';
+import {
+  INLINE_DETAIL_LIMIT,
+  KskModel,
+  MAX_DETAIL_FETCH_PER_CYCLE,
+} from '../constants';
 import { DetailQueueService } from '../detail-queue.service';
 import { KskRecord } from '../entities/ksk-record.entity';
 import { ScrapeState } from '../entities/scrape-state.entity';
-import { decodeHtmlBytes, parseDetailPage, parseListRows } from '../live/site-parsers';
+import {
+  decodeHtmlBytes,
+  parseDetailPage,
+  parseListRows,
+} from '../live/site-parsers';
 import { RemoteListRow } from '../mock/mock-data.generator';
 import { selectNewRows } from '../scan';
 import { ScraperStatusService } from '../scraper-status.service';
@@ -66,18 +74,32 @@ export class IngestService {
 
   /** One model's results page, exactly as the site returned it. */
   async ingestList(payload: ListPayload): Promise<ListIngestResult> {
-    const { text, charset } = decodeHtmlBytes(payload.bytes, payload.contentType, null);
+    const { text, charset } = decodeHtmlBytes(
+      payload.bytes,
+      payload.contentType,
+      null,
+    );
     const pageRows = parseListRows(text, payload.model);
 
     if (pageRows.length === 0) {
       // A login page, an error page, or markup that changed. Never treated as
       // "the plant produced nothing" — that would advance the watermark and
       // skip real records.
-      this.status.listFailed(payload.model, new Error('pushed page contained no rows'));
+      this.status.listFailed(
+        payload.model,
+        new Error('pushed page contained no rows'),
+      );
       this.logger.warn(
         `${payload.model}: pushed page had no rows (${text.length} chars) — ignored.`,
       );
-      return { model: payload.model, rowsOnPage: 0, stored: 0, charset, needDetails: [], pending: 0 };
+      return {
+        model: payload.model,
+        rowsOnPage: 0,
+        stored: 0,
+        charset,
+        needDetails: [],
+        pending: 0,
+      };
     }
 
     this.status.setCharset(charset);
@@ -89,7 +111,9 @@ export class IngestService {
     // history, so this costs a few indexed lookups — and a table that was
     // emptied or lost rows while scrape_state kept its high-water mark heals
     // on the next push instead of reporting "0 new" forever.
-    const state = await this.scrapeStateRepo.findOne({ where: { model: payload.model } });
+    const state = await this.scrapeStateRepo.findOne({
+      where: { model: payload.model },
+    });
     const selection = selectNewRows(pageRows, null);
 
     const stored = await this.storeListOnly(payload.model, selection.rows);
@@ -112,7 +136,10 @@ export class IngestService {
     this.status.agentSeen(payload.agent);
 
     const stored = await this.recordRepo.find({
-      where: { model: payload.model, no: In(payload.pages.map((page) => page.no)) },
+      where: {
+        model: payload.model,
+        no: In(payload.pages.map((page) => page.no)),
+      },
     });
     const byNo = new Map(stored.map((record) => [record.no, record]));
 
@@ -165,7 +192,10 @@ export class IngestService {
 
     // A handful of records appearing is live traffic worth animating; a
     // history backfill is thousands, and one refresh beats 5,939 events.
-    if (becameVisible.length > 0 && becameVisible.length <= INLINE_DETAIL_LIMIT) {
+    if (
+      becameVisible.length > 0 &&
+      becameVisible.length <= INLINE_DETAIL_LIMIT
+    ) {
       for (const record of becameVisible) this.gateway.emitNewRecord(record);
     } else if (becameVisible.length > 0) {
       this.gateway.emitRefresh();
@@ -195,12 +225,17 @@ export class IngestService {
 
   /** Records of this model still waiting for a detail page. */
   private pendingCount(model: KskModel): Promise<number> {
-    return this.recordRepo.count({ where: { model, detailFetchedAt: IsNull() } });
+    return this.recordRepo.count({
+      where: { model, detailFetchedAt: IsNull() },
+    });
   }
 
   /** What the agent should fetch next for this model, newest and live first. */
   private async nextDetailWork(model: KskModel): Promise<string[]> {
-    const candidates = await this.detailQueue.pick(MAX_DETAIL_FETCH_PER_CYCLE, model);
+    const candidates = await this.detailQueue.pick(
+      MAX_DETAIL_FETCH_PER_CYCLE,
+      model,
+    );
     return candidates.map((record) => record.no);
   }
 
@@ -209,14 +244,24 @@ export class IngestService {
    * from the dashboard until their detail page arrives — without it a record
    * has no rework timestamp and would read "En cours" whether or not it is.
    */
-  private async storeListOnly(model: KskModel, rows: RemoteListRow[]): Promise<number> {
-    const known = await this.knownNos(model, rows.map((row) => row.no));
+  private async storeListOnly(
+    model: KskModel,
+    rows: RemoteListRow[],
+  ): Promise<number> {
+    const known = await this.knownNos(
+      model,
+      rows.map((row) => row.no),
+    );
     const fresh = rows.filter((row) => !known.has(row.no));
     if (fresh.length === 0) return 0;
 
-    const records = fresh.map((row) => this.scraperService.buildListOnlyRecord(row));
+    const records = fresh.map((row) =>
+      this.scraperService.buildListOnlyRecord(row),
+    );
     await this.recordRepo.save(records, { chunk: 500 });
-    this.logger.log(`${model}: ${fresh.length} new row(s) from the pushed list page.`);
+    this.logger.log(
+      `${model}: ${fresh.length} new row(s) from the pushed list page.`,
+    );
     return fresh.length;
   }
 

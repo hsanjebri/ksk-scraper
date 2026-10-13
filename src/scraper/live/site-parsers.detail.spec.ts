@@ -7,6 +7,7 @@ import {
   parseDetailPage,
   parseErrorCodeRows,
   parseListRows,
+  stripTags,
 } from './site-parsers';
 
 /**
@@ -22,13 +23,20 @@ import {
  * below pin down: an unclosed main table, operator numbers ahead of every
  * timestamp, and a comment clipped at 60 characters.
  */
-const fixture = (name: string) => readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
+const fixture = (name: string) =>
+  readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
 
 const CLOSED_HTML = fixture('real-detail-MCM-3059-closed.html');
 const OPEN_HTML = fixture('real-detail-MAM-2944-open.html');
 
-const local = (y: number, mo: number, d: number, h: number, mi: number, s: number) =>
-  new Date(y, mo - 1, d, h, mi, s).toISOString();
+const local = (
+  y: number,
+  mo: number,
+  d: number,
+  h: number,
+  mi: number,
+  s: number,
+) => new Date(y, mo - 1, d, h, mi, s).toISOString();
 
 describe('detail page — closed record (real MCM #3059)', () => {
   const record = parseDetailPage(CLOSED_HTML, '3059', 'MCM');
@@ -50,7 +58,9 @@ describe('detail page — closed record (real MCM #3059)', () => {
   it('computes the same rework time the site itself reports', () => {
     const fields = parseDetailFields(CLOSED_HTML);
     const minutes = Math.round(
-      (new Date(record.reworked!).getTime() - new Date(record.registered).getTime()) / 60_000,
+      (new Date(record.reworked!).getTime() -
+        new Date(record.registered).getTime()) /
+        60_000,
     );
     expect(fields.get('time (min)')).toEqual(['7']);
     expect(minutes).toBe(7);
@@ -79,7 +89,9 @@ describe('detail page — closed record (real MCM #3059)', () => {
 
   it('restores the full comment from the error list, not the 60-character stump', () => {
     const clipped = parseDetailFields(CLOSED_HTML).get('comment')![0];
-    expect(clipped).toBe('inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n12');
+    expect(clipped).toBe(
+      'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n12',
+    );
     expect(clipped).toHaveLength(60);
 
     expect(record.comment).toBe(
@@ -129,7 +141,7 @@ describe('detail page — open record (real MAM #2944)', () => {
     expect(record.comment).toBe('MANQUE CONNECTEUR E17/47*1-S-V1 +SERTISSAGE');
   });
 
-  it('keeps the site\'s own wording for a cavity that does not apply', () => {
+  it("keeps the site's own wording for a cavity that does not apply", () => {
     expect(record.errorCodes[0].cavity).toBe('Not applicable');
   });
 });
@@ -155,7 +167,9 @@ describe('the unclosed main table', () => {
   });
 
   it('finds no error rows in a page without the list', () => {
-    expect(parseErrorCodeRows('<table><tr><td>model</td><td>MCM</td></tr></table>')).toEqual([]);
+    expect(
+      parseErrorCodeRows('<table><tr><td>model</td><td>MCM</td></tr></table>'),
+    ).toEqual([]);
   });
 });
 
@@ -179,5 +193,21 @@ describe('list row + detail page for the same record', () => {
     expect(merged.reworked).toBe(local(2026, 9, 17, 11, 26, 59));
     expect(merged.qualityGate).toBe('EOL Electrical test');
     expect(merged.errorCodes[0].cavity).toBe('32');
+  });
+});
+
+describe('stripTags', () => {
+  it('removes markup but keeps the text', () => {
+    expect(stripTags('<font color="red">006305862C</font>')).toBe('006305862C');
+  });
+
+  it('cannot be tricked into leaving a tag behind by nesting', () => {
+    expect(stripTags('<scr<b>ipt>alert(1)</scr</b>ipt>')).not.toMatch(
+      /<\s*script/i,
+    );
+  });
+
+  it('leaves escaped text alone, for unescapeHtml to decode', () => {
+    expect(stripTags('gap &lt;5mm')).toBe('gap &lt;5mm');
   });
 });

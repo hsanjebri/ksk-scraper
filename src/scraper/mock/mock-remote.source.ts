@@ -55,7 +55,8 @@ export class MockRemoteSource implements RemoteSource {
     const list = this.order.get(model)!;
     const records = list.map((no) => this.mustGet(model, no));
     records.sort(
-      (a, b) => new Date(a.registered).getTime() - new Date(b.registered).getTime(),
+      (a, b) =>
+        new Date(a.registered).getTime() - new Date(b.registered).getTime(),
     );
 
     for (const no of list) this.store.delete(this.key(model, no));
@@ -118,7 +119,9 @@ export class MockRemoteSource implements RemoteSource {
     const record = this.mustGet(model, no);
     if (!record.reworked && Math.random() < 0.2) {
       record.reworked = new Date().toISOString();
-      record.qualityControlDate = new Date(Date.now() + 30 * 60_000).toISOString();
+      record.qualityControlDate = new Date(
+        Date.now() + 30 * 60_000,
+      ).toISOString();
     }
     return record;
   }
@@ -137,7 +140,12 @@ export class MockRemoteSource implements RemoteSource {
     maxHoursAgo?: number,
   ): RemoteDetailRecord {
     const no = this.nextNo(model);
-    const record = generateRandomDetailRecord(model, no, forceOpen, maxHoursAgo);
+    const record = generateRandomDetailRecord(
+      model,
+      no,
+      forceOpen,
+      maxHoursAgo,
+    );
     this.store.set(this.key(model, no), record);
     this.order.get(model)!.push(no);
     return record;
@@ -155,6 +163,7 @@ export class MockRemoteSource implements RemoteSource {
 }
 
 function toListRow(record: RemoteDetailRecord): RemoteListRow {
-  const { no, model, carId, zsb, registered, errorCode, comment, color } = record;
+  const { no, model, carId, zsb, registered, errorCode, comment, color } =
+    record;
   return { no, model, carId, zsb, registered, errorCode, comment, color };
 }

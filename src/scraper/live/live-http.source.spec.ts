@@ -1,4 +1,8 @@
-import { parseDetailFields, parseListRows, parseSiteDate } from './live-http.source';
+import {
+  parseDetailFields,
+  parseListRows,
+  parseSiteDate,
+} from './live-http.source';
 
 /**
  * These cover the port from the production RelayServer.java — specifically the
@@ -83,7 +87,9 @@ describe('live scraper parsers', () => {
     });
 
     it('returns nothing for an unrelated page instead of throwing', () => {
-      expect(parseListRows('<html><body>Session expired</body></html>', 'MAM')).toEqual([]);
+      expect(
+        parseListRows('<html><body>Session expired</body></html>', 'MAM'),
+      ).toEqual([]);
     });
   });
 
@@ -122,7 +128,9 @@ describe('live scraper parsers', () => {
     });
 
     it('decodes entities in values', () => {
-      expect(parseDetailFields(html).get('comment')).toEqual(['Reworked & verified']);
+      expect(parseDetailFields(html).get('comment')).toEqual([
+        'Reworked & verified',
+      ]);
     });
 
     // The relay matches labels with startsWith(), so a comment beginning with
@@ -133,7 +141,9 @@ describe('live scraper parsers', () => {
       const dict = parseDetailFields(
         '<table><tr><td>Comment</td><td>Reworked &amp; verified, registered twice</td></tr></table>',
       );
-      expect(dict.get('comment')).toEqual(['Reworked & verified, registered twice']);
+      expect(dict.get('comment')).toEqual([
+        'Reworked & verified, registered twice',
+      ]);
       expect(dict.has('reworked')).toBe(false);
       expect(dict.has('registered')).toBe(false);
     });

@@ -49,7 +49,9 @@ export class ScraperSeedService implements OnApplicationBootstrap {
         { detailFetchedAt: now, detailCheckedAt: now },
       );
       if (result.affected) {
-        this.logger.log(`Marked ${result.affected} existing mock record(s) as detail-complete.`);
+        this.logger.log(
+          `Marked ${result.affected} existing mock record(s) as detail-complete.`,
+        );
       }
       this.logger.log(`Skipping seed — ${existing} record(s) already in DB.`);
       return;
@@ -85,7 +87,9 @@ export class ScraperSeedService implements OnApplicationBootstrap {
       });
     }
 
-    this.logger.log(`Seeded ${await this.recordRepo.count()} fake KskRecord(s).`);
+    this.logger.log(
+      `Seeded ${await this.recordRepo.count()} fake KskRecord(s).`,
+    );
   }
 
   /**

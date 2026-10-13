@@ -82,7 +82,11 @@ export class DetailQueueService {
         await this.recordRepo.find({
           where: [
             { ...scope, detailFetchedAt: IsNull(), detailCheckedAt: IsNull() },
-            { ...scope, detailFetchedAt: IsNull(), detailCheckedAt: LessThan(new Date(now - PENDING_RETRY_MS)) },
+            {
+              ...scope,
+              detailFetchedAt: IsNull(),
+              detailCheckedAt: LessThan(new Date(now - PENDING_RETRY_MS)),
+            },
           ],
           order: { registered: 'DESC' },
           take: remaining(),

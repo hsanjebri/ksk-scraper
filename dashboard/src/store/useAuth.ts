@@ -1,44 +1,69 @@
-import { DASHBOARD_CREDENTIALS } from '@/lib/config'
+import {
+  ApiUnavailableError,
+  fetchCurrentUser,
+  signInRequest,
+  signOutRequest,
+  type SignInOutcome,
+} from '@/lib/api'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+
+/**
+ * `checking`    asking the server whether the session cookie is valid
+ * `signedOut`   show the sign-in page
+ * `signedIn`    show the dashboard
+ * `unavailable` the server could not be reached to find out
+ */
+export type AuthStatus = 'checking' | 'signedOut' | 'signedIn' | 'unavailable'
 
 interface AuthState {
-  signedIn: boolean
-  /** Who is signed in — shown in the top bar. */
+  status: AuthStatus
   user: string | null
-  signIn: (user: string, password: string) => boolean
-  signOut: () => void
+  /** Result of the last sign-in attempt, for the form's message. */
+  lastAttempt: Exclude<SignInOutcome, 'ok'> | null
+  check: () => Promise<void>
+  signIn: (username: string, password: string) => Promise<void>
+  signOut: () => Promise<void>
+  /** Called when any request comes back 401: the session ended server-side. */
+  expire: () => void
 }
 
 /**
- * Sign-in gate for the dashboard.
+ * Dashboard sign-in, backed by the server.
  *
- * ⚠️ This keeps casual visitors out of the screen. It is NOT access control:
- * the credentials ship inside the JavaScript bundle, and the API behind it
- * stays open, so anyone who wants the data can still read it from
- * `GET /records` directly. Treat it as a front door with a sign on it, not a
- * lock. Real protection has to live on the server (see the README).
+ * The session itself is an HttpOnly cookie set by the backend: nothing
+ * secret is held here or in localStorage, and no credential ships in the
+ * JavaScript bundle. The server decides on every request.
  */
-export const useAuth = create<AuthState>()(
-  persist(
-    (set) => ({
-      signedIn: false,
-      user: null,
+export const useAuth = create<AuthState>((set) => ({
+  status: 'checking',
+  user: null,
+  lastAttempt: null,
 
-      signIn: (user, password) => {
-        const ok =
-          user.trim().toLowerCase() === DASHBOARD_CREDENTIALS.user &&
-          password === DASHBOARD_CREDENTIALS.password
-        if (ok) set({ signedIn: true, user: user.trim() })
-        return ok
-      },
+  async check() {
+    try {
+      const { user } = await fetchCurrentUser()
+      set({ status: 'signedIn', user })
+    } catch (error) {
+      set({ status: error instanceof ApiUnavailableError ? 'unavailable' : 'signedOut', user: null })
+    }
+  },
 
-      signOut: () => set({ signedIn: false, user: null }),
-    }),
-    {
-      name: 'ksk-dashboard-auth',
-      // Survives a reload so nobody has to sign in again mid-presentation.
-      partialize: (state) => ({ signedIn: state.signedIn, user: state.user }),
-    },
-  ),
-)
+  async signIn(username, password) {
+    const outcome = await signInRequest(username, password)
+    if (outcome !== 'ok') {
+      set({ lastAttempt: outcome })
+      return
+    }
+    set({ lastAttempt: null })
+    await useAuth.getState().check()
+  },
+
+  async signOut() {
+    await signOutRequest()
+    set({ status: 'signedOut', user: null, lastAttempt: null })
+  },
+
+  expire() {
+    set({ status: 'signedOut', user: null })
+  },
+}))

@@ -1,3 +1,5 @@
+import { neutraliseFormula } from './escape'
+
 /**
  * CSV export for the Reports page.
  *
@@ -11,11 +13,14 @@
  *
  * 2. Quoting. The site's comments routinely contain commas and quotes, so
  *    every field is quoted and internal quotes are doubled per RFC 4180.
+ *
+ * 3. Formula injection. The cells are scraped text typed by operators; one
+ *    starting with "=" would run as a formula in Excel. See neutraliseFormula.
  */
 
 function escapeCell(value: unknown): string {
   if (value === null || value === undefined) return '""'
-  const text = String(value).replace(/"/g, '""')
+  const text = neutraliseFormula(String(value)).replace(/"/g, '""')
   return `"${text}"`
 }
 

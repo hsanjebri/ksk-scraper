@@ -5,6 +5,15 @@
 # SEBN TN3 — Rework Quality Dashboard
 
 <p align="center">
+  <a href="https://github.com/hsanjebri/ksk-scraper/actions/workflows/ci.yml"><img src="https://github.com/hsanjebri/ksk-scraper/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI/CD" /></a>
+  <a href="https://github.com/hsanjebri/ksk-scraper/actions/workflows/codeql.yml"><img src="https://github.com/hsanjebri/ksk-scraper/actions/workflows/codeql.yml/badge.svg?branch=main" alt="CodeQL" /></a>
+  <img src="https://img.shields.io/badge/node-22%20%7C%2024-339933?logo=nodedotjs&logoColor=white" alt="Node 22 | 24" />
+  <img src="https://img.shields.io/badge/NestJS-10-E0234E?logo=nestjs&logoColor=white" alt="NestJS 10" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" alt="PostgreSQL 16" />
+</p>
+
+<p align="center">
   <img src="dashboard/public/rework-banner.png" alt="Rework Analysis — SEBN TN03 Mercedes Project" width="720" />
 </p>
 
@@ -297,6 +306,50 @@ base64 of the raw bytes.
 
 The replay server also simulates live traffic: a new record appearing, a repair,
 a quality-control release, and an error code added mid-repair.
+
+---
+
+## CI/CD
+
+Every push and pull request runs the pipeline in
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml); a push to `main` also
+publishes the Docker image and deploys.
+
+```mermaid
+flowchart LR
+    lint["🔍 Lint & type-check<br/><sub>ESLint · tsc · Prettier</sub>"]
+    test["🧪 Unit tests<br/><sub>Jest · Node 22 + 24 · coverage</sub>"]
+    build["🏗️ Build<br/><sub>NestJS · Vite · oxlint</sub>"]
+    int["🐘 Integration<br/><sub>built API + PostgreSQL 16</sub>"]
+    docker["🐳 Docker<br/><sub>build · smoke test · Trivy · GHCR</sub>"]
+    audit["🛡️ Dependency audit"]
+    deploy["🚀 Deploy<br/><sub>Railway · production smoke test</sub>"]
+
+    lint --> test --> docker
+    lint --> build --> int --> docker
+    docker --> deploy
+    audit --> deploy
+```
+
+| Stage | What it proves |
+| --- | --- |
+| Lint & type-check | no ESLint errors, Prettier-formatted, the whole API type-checks |
+| Unit tests | 145 tests on Node 22 and 24, including the site parsers against real captured HTML; coverage published on the run page |
+| Build | API and dashboard compile; dashboard bundle sizes reported |
+| Integration | the **built** server against a real PostgreSQL, driven over HTTP as both clients: dashboard sign-in and cookie flags, then the plant collector's HMAC-signed pushes — unsigned, wrong-key and replayed requests refused, the captured page parsed, stored once, and visible after its detail page arrives |
+| Docker | the image builds and boots, is scanned by Trivy (results in the Security tab), and on `main` is pushed to GHCR |
+| Deploy | `main` only: deployed to Railway, then production must answer `/` and refuse anonymous reads of `/records` |
+
+Alongside it: **CodeQL** scans the TypeScript and the workflows on every push
+and weekly, **Dependabot** opens grouped upgrade PRs every Monday, and pull
+requests get a dependency review that blocks newly added high-severity
+advisories.
+
+Run the integration suite locally against a running server:
+
+```bash
+SYNC_SECRET=... CI_USER=... CI_PASSWORD=... npm run test:integration
+```
 
 ---
 

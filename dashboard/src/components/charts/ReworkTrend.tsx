@@ -1,3 +1,4 @@
+import { escapeHtml } from '@/lib/escape'
 import { useVizTokens } from '@/hooks/useDashboardData'
 import { shortWeek } from '@/lib/format'
 import { EChart } from '@/lib/echarts'
@@ -40,13 +41,14 @@ export function ReworkTrend({ weeks }: { weeks: WeekBucket[] }) {
         padding: [8, 12],
         textStyle: { color: tokens.ink, fontSize: 12 },
         formatter: (params: { axisValue: string; seriesName: string; value: number }[]) => {
-          const header = `<div style="font-weight:600;margin-bottom:4px">${params[0]?.axisValue ?? ''}</div>`
+          // Rendered as innerHTML — every interpolated value is escaped.
+          const header = `<div style="font-weight:600;margin-bottom:4px">${escapeHtml(params[0]?.axisValue ?? '')}</div>`
           const lines = params
             .map((p) => {
               const suffix = p.seriesName.includes('rate') ? '%' : ''
               return `<div style="display:flex;gap:12px;justify-content:space-between">
-                        <span style="color:${tokens.inkSecondary}">${p.seriesName}</span>
-                        <strong>${p.value}${suffix}</strong>
+                        <span style="color:${tokens.inkSecondary}">${escapeHtml(p.seriesName)}</span>
+                        <strong>${escapeHtml(p.value)}${suffix}</strong>
                       </div>`
             })
             .join('')

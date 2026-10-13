@@ -41,7 +41,10 @@ export function selectNewRows(
   const rows = valid
     .filter((row) => {
       if (backfill) {
-        return !backfillSince || new Date(row.registered).getTime() >= backfillSince.getTime();
+        return (
+          !backfillSince ||
+          new Date(row.registered).getTime() >= backfillSince.getTime()
+        );
       }
       return numericNo(row) > last;
     })

@@ -6,7 +6,11 @@ import { ErrorCodeEntry } from './entities/error-code.entity';
 import { KskRecord } from './entities/ksk-record.entity';
 import { ScrapeState } from './entities/scrape-state.entity';
 import { enrichWithDetail, mergeListAndDetail, syncErrorCodes } from './merge';
-import { RemoteDetailRecord, RemoteErrorCodeRow, RemoteListRow } from './mock/mock-data.generator';
+import {
+  RemoteDetailRecord,
+  RemoteErrorCodeRow,
+  RemoteListRow,
+} from './mock/mock-data.generator';
 import { REMOTE_SOURCE, RemoteSource } from './remote-source.interface';
 import { ScanSelection, selectNewRows } from './scan';
 
@@ -26,22 +30,40 @@ export class ScraperService {
    * Does NOT advance ScrapeState — the caller records progress only once rows
    * are actually persisted, so a failure is retried instead of skipped.
    */
-  async scanList(model: KskModel): Promise<{ pageRows: RemoteListRow[]; selection: ScanSelection }> {
+  async scanList(
+    model: KskModel,
+  ): Promise<{ pageRows: RemoteListRow[]; selection: ScanSelection }> {
     const pageRows = await this.remoteSource.getListPage(model);
     const state = await this.scrapeStateRepo.findOne({ where: { model } });
     const backfillSince =
-      BACKFILL_DAYS > 0 ? new Date(Date.now() - BACKFILL_DAYS * 86_400_000) : null;
+      BACKFILL_DAYS > 0
+        ? new Date(Date.now() - BACKFILL_DAYS * 86_400_000)
+        : null;
 
-    return { pageRows, selection: selectNewRows(pageRows, state?.lastSeenNo ?? null, backfillSince) };
+    return {
+      pageRows,
+      selection: selectNewRows(
+        pageRows,
+        state?.lastSeenNo ?? null,
+        backfillSince,
+      ),
+    };
   }
 
   /** Records that `no` (and every lower No.) has been handled for `model`. */
   async markSeen(model: KskModel, no: string): Promise<void> {
-    await this.scrapeStateRepo.save({ model, lastSeenNo: no, updatedAt: new Date() });
+    await this.scrapeStateRepo.save({
+      model,
+      lastSeenNo: no,
+      updatedAt: new Date(),
+    });
   }
 
   /** Raw detail-page record. Throws when the page can't be fetched or parsed. */
-  async fetchDetailRaw(no: string, model: KskModel): Promise<RemoteDetailRecord> {
+  async fetchDetailRaw(
+    no: string,
+    model: KskModel,
+  ): Promise<RemoteDetailRecord> {
     return this.remoteSource.getDetailPage(no, model);
   }
 
@@ -70,9 +92,16 @@ export class ScraperService {
    * Applies a detail page to a stored record. Safe to repeat — see
    * enrichWithDetail.
    */
-  applyDetail(record: KskRecord, fresh: RemoteDetailRecord): { closedNow: boolean } {
+  applyDetail(
+    record: KskRecord,
+    fresh: RemoteDetailRecord,
+  ): { closedNow: boolean } {
     const result = enrichWithDetail(record, fresh);
-    record.errorCodes = syncErrorCodes(record.errorCodes, fresh.errorCodes, toErrorCodeEntity);
+    record.errorCodes = syncErrorCodes(
+      record.errorCodes,
+      fresh.errorCodes,
+      toErrorCodeEntity,
+    );
     const now = new Date();
     record.detailFetchedAt = now;
     record.detailCheckedAt = now;

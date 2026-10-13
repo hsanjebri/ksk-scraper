@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -21,6 +22,7 @@ import { ScraperService } from './scraper.service';
 
 @Module({
   imports: [
+    AuthModule,
     ScheduleModule.forRoot(),
     TypeOrmModule.forFeature([KskRecord, ErrorCodeEntry, ScrapeState]),
   ],
@@ -43,7 +45,11 @@ import { ScraperService } from './scraper.service';
       // SCRAPER_MODE=relay          -> nothing is fetched here at all: a plant
       //                                agent pushes pages to /api/scraper/ingest.
       provide: REMOTE_SOURCE,
-      useFactory: (config: ConfigService, mock: MockRemoteSource, live: LiveHttpSource) => {
+      useFactory: (
+        config: ConfigService,
+        mock: MockRemoteSource,
+        live: LiveHttpSource,
+      ) => {
         const mode = config.get<string>('SCRAPER_MODE', 'mock');
         if (mode === 'relay') return RELAY_SOURCE;
         return mode === 'live' ? live : mock;

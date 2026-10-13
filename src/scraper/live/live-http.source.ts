@@ -58,8 +58,7 @@ export class LiveHttpSource implements RemoteSource {
     const baseUrl = this.requireBaseUrl();
     if (!this.sessionCookie) await this.warmUpSession(baseUrl);
 
-    const body =
-      `numer=&model=${encodeURIComponent(model)}&kenn=&rej1=&rej2=&komentar=&kolor=`;
+    const body = `numer=&model=${encodeURIComponent(model)}&kenn=&rej1=&rej2=&komentar=&kolor=`;
 
     // The real list page is the full history: ~700 KB per model.
     const response = await retryOnReset(() =>
@@ -78,7 +77,10 @@ export class LiveHttpSource implements RemoteSource {
     );
 
     this.captureCookies(response.headers as Record<string, unknown>);
-    const html = this.decode(response.data as ArrayBuffer, response.headers['content-type']);
+    const html = this.decode(
+      response.data as ArrayBuffer,
+      response.headers['content-type'],
+    );
 
     const rows = parseListRows(html, model);
     if (rows.length === 0) {
@@ -96,10 +98,12 @@ export class LiveHttpSource implements RemoteSource {
   // ---------------------------------------------------------------- //
   // DETAIL  —  GET /Szczegol.php?numer=X&model=Y
   // ---------------------------------------------------------------- //
-  async getDetailPage(no: string, model: KskModel): Promise<RemoteDetailRecord> {
+  async getDetailPage(
+    no: string,
+    model: KskModel,
+  ): Promise<RemoteDetailRecord> {
     const baseUrl = this.requireBaseUrl();
-    const url =
-      `${baseUrl}/Szczegol.php?numer=${encodeURIComponent(no)}&model=${encodeURIComponent(model)}`;
+    const url = `${baseUrl}/Szczegol.php?numer=${encodeURIComponent(no)}&model=${encodeURIComponent(model)}`;
 
     const response = await retryOnReset(() =>
       axios.get(url, {
@@ -112,14 +116,19 @@ export class LiveHttpSource implements RemoteSource {
       }),
     );
 
-    const html = this.decode(response.data as ArrayBuffer, response.headers['content-type']);
+    const html = this.decode(
+      response.data as ArrayBuffer,
+      response.headers['content-type'],
+    );
     const record = parseDetailPage(html, no, model);
 
     if (detailLooksEmpty(record)) {
       await this.dumpDebugHtml(`detail-${model}-${no}`, html);
       // Thrown rather than returned: an empty record would otherwise be marked
       // as fetched and never retried.
-      throw new Error(`Detail page ${model} #${no} contained no recognisable fields (dumped to debug/)`);
+      throw new Error(
+        `Detail page ${model} #${no} contained no recognisable fields (dumped to debug/)`,
+      );
     }
     return record;
   }
@@ -170,7 +179,9 @@ export class LiveHttpSource implements RemoteSource {
 
     if (!this.charsetLogged) {
       this.charsetLogged = true;
-      this.logger.log(`Site pages decoded as ${charset}${override ? ' (SITE_CHARSET override)' : ''}.`);
+      this.logger.log(
+        `Site pages decoded as ${charset}${override ? ' (SITE_CHARSET override)' : ''}.`,
+      );
     }
     this.status?.setCharset(charset);
     return text;
@@ -198,7 +209,8 @@ export class LiveHttpSource implements RemoteSource {
   }
 }
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SEBN-ReworkDashboard/1.0';
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SEBN-ReworkDashboard/1.0';
 
 const RESET_CODES = new Set(['ECONNRESET', 'EPIPE']);
 

@@ -62,7 +62,9 @@ const asModel = (value: unknown): KskModel | null =>
     : null;
 
 const asOptionalString = (value: unknown): string | null =>
-  typeof value === 'string' && value.trim() !== '' ? value.trim().slice(0, 200) : null;
+  typeof value === 'string' && value.trim() !== ''
+    ? value.trim().slice(0, 200)
+    : null;
 
 /**
  * Decodes base64 and rejects anything that is not valid base64 of a plausible
@@ -70,7 +72,10 @@ const asOptionalString = (value: unknown): string | null =>
  * or mangled upload would otherwise arrive as a short, half-valid page and be
  * parsed as if it were real.
  */
-export function decodeBase64Page(value: unknown, label: string): Parsed<Uint8Array> {
+export function decodeBase64Page(
+  value: unknown,
+  label: string,
+): Parsed<Uint8Array> {
   if (typeof value !== 'string' || value.length === 0) {
     return { ok: false, error: `${label} is missing` };
   }
@@ -81,16 +86,44 @@ export function decodeBase64Page(value: unknown, label: string): Parsed<Uint8Arr
   const bytes = Buffer.from(compact, 'base64');
   if (bytes.length === 0) return { ok: false, error: `${label} is empty` };
   if (bytes.length > MAX_PAGE_BYTES) {
-    return { ok: false, error: `${label} is too large (${bytes.length} bytes)` };
+    return {
+      ok: false,
+      error: `${label} is too large (${bytes.length} bytes)`,
+    };
   }
   return { ok: true, value: new Uint8Array(bytes) };
 }
 
+/**
+ * Name of the first field outside the schema, or null. Unknown fields are
+ * refused rather than ignored: a payload that does not match what the agent
+ * sends is either a bug or someone probing, and neither should be accepted.
+ */
+function unknownField(
+  value: Record<string, unknown>,
+  allowed: readonly string[],
+): string | null {
+  return Object.keys(value).find((key) => !allowed.includes(key)) ?? null;
+}
+
 export function parseListPayload(body: unknown): Parsed<ListPayload> {
-  if (!isRecord(body)) return { ok: false, error: 'body must be a JSON object' };
+  if (!isRecord(body))
+    return { ok: false, error: 'body must be a JSON object' };
+  const extra = unknownField(body, [
+    'model',
+    'listBase64',
+    'contentType',
+    'agent',
+  ]);
+  if (extra)
+    return { ok: false, error: `unexpected field "${extra.slice(0, 40)}"` };
 
   const model = asModel(body.model);
-  if (!model) return { ok: false, error: `model must be one of ${KSK_MODELS.join(', ')}` };
+  if (!model)
+    return {
+      ok: false,
+      error: `model must be one of ${KSK_MODELS.join(', ')}`,
+    };
 
   const decoded = decodeBase64Page(body.listBase64, 'listBase64');
   if (parseFailed(decoded)) return decoded;
@@ -107,45 +140,58 @@ export function parseListPayload(body: unknown): Parsed<ListPayload> {
 }
 
 export function parseDetailPayload(body: unknown): Parsed<DetailPayload> {
-  if (!isRecord(body)) return { ok: false, error: 'body must be a JSON object' };
+  if (!isRecord(body))
+    return { ok: false, error: 'body must be a JSON object' };
+  const extra = unknownField(body, ['model', 'pages', 'agent']);
+  if (extra)
+    return { ok: false, error: `unexpected field "${extra.slice(0, 40)}"` };
 
   const model = asModel(body.model);
-  if (!model) return { ok: false, error: `model must be one of ${KSK_MODELS.join(', ')}` };
+  if (!model)
+    return {
+      ok: false,
+      error: `model must be one of ${KSK_MODELS.join(', ')}`,
+    };
 
-  if (!Array.isArray(body.pages)) return { ok: false, error: 'pages must be an array' };
+  if (!Array.isArray(body.pages))
+    return { ok: false, error: 'pages must be an array' };
   if (body.pages.length === 0) return { ok: false, error: 'pages is empty' };
   if (body.pages.length > MAX_PAGES_PER_BATCH) {
-    return { ok: false, error: `too many pages in one batch (max ${MAX_PAGES_PER_BATCH})` };
+    return {
+      ok: false,
+      error: `too many pages in one batch (max ${MAX_PAGES_PER_BATCH})`,
+    };
   }
 
   const pages: DetailPayload['pages'] = [];
   for (const entry of body.pages) {
-    if (!isRecord(entry)) return { ok: false, error: 'each page must be an object' };
+    if (!isRecord(entry))
+      return { ok: false, error: 'each page must be an object' };
+    const extraInPage = unknownField(entry, ['no', 'base64', 'contentType']);
+    if (extraInPage)
+      return {
+        ok: false,
+        error: `unexpected field "${extraInPage.slice(0, 40)}" in a page`,
+      };
     const no = typeof entry.no === 'string' ? entry.no.trim() : '';
-    if (!/^\d{1,12}$/.test(no)) return { ok: false, error: `invalid record number "${String(entry.no)}"` };
+    if (!/^\d{1,12}$/.test(no))
+      return {
+        ok: false,
+        error: `invalid record number "${String(entry.no)}"`,
+      };
 
     const decoded = decodeBase64Page(entry.base64, `page ${no}`);
     if (parseFailed(decoded)) return decoded;
 
-    pages.push({ no, bytes: decoded.value, contentType: asOptionalString(entry.contentType) });
+    pages.push({
+      no,
+      bytes: decoded.value,
+      contentType: asOptionalString(entry.contentType),
+    });
   }
 
-  return { ok: true, value: { model, pages, agent: asOptionalString(body.agent) } };
-}
-
-/**
- * Constant-time-ish comparison of the shared secret.
- *
- * Compares every character regardless of where the first difference is, so the
- * time taken says nothing about how much of the secret was correct.
- */
-export function secretMatches(provided: unknown, expected: string | undefined): boolean {
-  if (!expected) return false; // fail closed: no secret configured, no ingest
-  if (typeof provided !== 'string' || provided.length !== expected.length) return false;
-
-  let diff = 0;
-  for (let i = 0; i < expected.length; i++) {
-    diff |= provided.charCodeAt(i) ^ expected.charCodeAt(i);
-  }
-  return diff === 0;
+  return {
+    ok: true,
+    value: { model, pages, agent: asOptionalString(body.agent) },
+  };
 }
