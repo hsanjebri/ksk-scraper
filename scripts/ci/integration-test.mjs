@@ -231,7 +231,9 @@ const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} checks passed.`);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
-  const escape = (text) => String(text).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+  // Backslashes first, so the escapes added for pipes are not themselves escaped.
+  const escape = (text) =>
+    String(text).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
   const rows = results
     .map((r) => `| ${r.ok ? '✅' : '❌'} | ${r.name} | ${escape(r.detail)} | ${Math.round(r.ms)} ms |`)
     .join('\n');
