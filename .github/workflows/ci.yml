@@ -372,7 +372,7 @@ jobs:
 
       - name: npm audit (production dependencies)
         env:
-          AUDIT_FAIL_ON: none
+          AUDIT_FAIL_ON: high
         run: node scripts/ci/audit-summary.mjs
 
   dependency-review:

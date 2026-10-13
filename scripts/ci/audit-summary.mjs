@@ -5,8 +5,8 @@
  *
  *   AUDIT_FAIL_ON=none|critical|high   (default: none — report only)
  *
- * Starts as report-only because known advisories exist today; raise the bar
- * once Dependabot's upgrade PRs have landed.
+ * CI runs it with AUDIT_FAIL_ON=high. Report-only (none) is the default for
+ * running it locally.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
