@@ -13,6 +13,13 @@ import { ScraperModule } from './scraper/scraper.module';
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService): TypeOrmModuleOptions => {
+        // Automatic schema sync alters tables at startup, which needs DDL
+        // rights and can drop a column when an entity changes. On by default
+        // so a fresh deployment works; set DB_SYNCHRONIZE=false once the schema
+        // exists, and run the app with a role that has no DDL rights
+        // (SECURITY.md, least privilege).
+        const synchronize = config.get<string>('DB_SYNCHRONIZE', 'true') !== 'false';
+
         // Each branch is annotated separately: as a single inline union the
         // compiler cannot discriminate on `type` and tries to validate the
         // SQLite shape against the mssql options interface.
@@ -28,7 +35,7 @@ import { ScraperModule } from './scraper/scraper.module';
           const ssl = needsSsl ? { rejectUnauthorized: false } : undefined;
 
           const postgres: TypeOrmModuleOptions = url
-            ? { type: 'postgres', url, ssl, autoLoadEntities: true, synchronize: true }
+            ? { type: 'postgres', url, ssl, autoLoadEntities: true, synchronize }
             : {
                 type: 'postgres',
                 host: config.get<string>('DB_HOST', 'localhost'),
@@ -38,7 +45,7 @@ import { ScraperModule } from './scraper/scraper.module';
                 database: config.get<string>('DB_NAME', 'ksk_scraper'),
                 ssl,
                 autoLoadEntities: true,
-                synchronize: true,
+                synchronize,
               };
           return postgres;
         }
@@ -60,7 +67,7 @@ import { ScraperModule } from './scraper/scraper.module';
           type: 'better-sqlite3',
           database: `${config.get<string>('DB_NAME', 'ksk_scraper')}-${mode}.sqlite`,
           autoLoadEntities: true,
-          synchronize: true,
+          synchronize,
           // better-sqlite3 is synchronous: every statement blocks the event
           // loop. In the default rollback-journal mode each save's COMMIT
           // waits on a disk flush — profiled at 43% of wall time during a

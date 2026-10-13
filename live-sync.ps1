@@ -44,9 +44,22 @@ if ($env:SYNC_INTERVAL){ $IntervalSeconds = [int]$env:SYNC_INTERVAL }
 if ($env:SYNC_CYCLES)  { $MaxCycles = [int]$env:SYNC_CYCLES } else { $MaxCycles = 0 }
 
 $IngestUrl   = "$CloudUrl/api/scraper/ingest"
-$AgentName   = "$env:COMPUTERNAME"
+# Nom neutre, pas le nom du PC : le nom d'un poste de l'usine n'a pas a
+# sortir du reseau. Modifiable avec SYNC_AGENT_LABEL (lettres, chiffres, . _ -).
+$AgentName   = 'plant-agent'
+if ($env:SYNC_AGENT_LABEL -match '^[A-Za-z0-9._-]{1,40}$') { $AgentName = $env:SYNC_AGENT_LABEL }
 $LogFile     = Join-Path $PSScriptRoot 'live-sync.log'
+$MaxLogBytes = 5MB
 $UserAgent   = 'SEBN-ReworkDashboard-Agent/1.0'
+
+# Les donnees ne partent que chiffrees (HTTPS, certificat verifie par
+# Windows). Une adresse en http:// n'est acceptee que vers cette machine,
+# pour les tests.
+$cloudUri = [Uri]$CloudUrl
+if ($cloudUri.Scheme -ne 'https' -and $cloudUri.Host -notin @('localhost', '127.0.0.1')) {
+  Write-Host "Refus : l'adresse du tableau de bord doit commencer par https://" -ForegroundColor Red
+  exit 1
+}
 
 # TLS 1.2 : les anciens PowerShell ne l'activent pas par defaut et l'envoi
 # HTTPS echouerait sans explication.
@@ -57,11 +70,34 @@ $script:Session = $null
 $script:SyncKey = $null
 $script:Rejections = 0
 
+# Le journal ne contient que des evenements (heures, nombres de fiches,
+# erreurs) : jamais la cle, jamais le contenu des pages. Taille bornee.
 function Write-Log {
   param([string]$Message, [string]$Color = 'Gray')
-  $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $Message
+  $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
   Write-Host $line -ForegroundColor $Color
-  try { Add-Content -Path $LogFile -Value $line -Encoding UTF8 } catch { }
+  try {
+    if ((Test-Path $LogFile) -and (Get-Item $LogFile).Length -gt $MaxLogBytes) {
+      Move-Item -Path $LogFile -Destination "$LogFile.1" -Force
+    }
+    Add-Content -Path $LogFile -Value $line -Encoding UTF8
+  } catch { }
+}
+
+# --- Minimisation des donnees ------------------------------------------
+# Les fiches detail portent le numero de l'operateur qui a enregistre,
+# repare et controle (donnees personnelles). Le tableau de bord ne s'en sert
+# pas : ils sont effaces ICI, sur le PC, avant tout envoi.
+# Traitement octet par octet (Latin-1 conserve chaque octet tel quel), pour
+# ne pas toucher a l'encodage des accents que le serveur detecte lui-meme.
+$Latin1 = [Text.Encoding]::GetEncoding(28591)
+$OperatorCell = '(?i)(>\s*(?:registered|reworked|quality control)\s*</font>\s*</td>\s*<td[^>]*>)\s*\d+\s*(</td>)'
+
+function Remove-OperatorNumbers {
+  param([byte[]]$Bytes)
+  $text = $Latin1.GetString($Bytes)
+  $clean = [regex]::Replace($text, $OperatorCell, '$1$2')
+  return $Latin1.GetBytes($clean)
 }
 
 # --- Cle de signature ------------------------------------------------
@@ -206,7 +242,8 @@ function Get-PageBase64 {
   # Les octets bruts, pas le texte : le site n'annonce aucun encodage et le
   # serveur le detecte lui-meme. Laisser PowerShell decoder casserait les
   # accents (un commentaire sur trois en contient).
-  return [Convert]::ToBase64String($resp.RawContentStream.ToArray())
+  $bytes = Remove-OperatorNumbers -Bytes $resp.RawContentStream.ToArray()
+  return [Convert]::ToBase64String($bytes)
 }
 
 function Send-ListPage {
@@ -306,7 +343,7 @@ Write-Host "   SEBN TN3 - Rework Live Sync" -ForegroundColor Cyan
 Write-Host "  ============================================" -ForegroundColor Cyan
 Write-Host "   Site rework   : $Base" -ForegroundColor Gray
 Write-Host "   Tableau bord  : $CloudUrl" -ForegroundColor Gray
-Write-Host "   Poste         : $AgentName" -ForegroundColor Gray
+Write-Host "   Identifiant   : $AgentName" -ForegroundColor Gray
 Write-Host "   Cycle         : toutes les $IntervalSeconds secondes" -ForegroundColor Gray
 Write-Host ""
 Write-Host "   Laissez cette fenetre ouverte pendant la demonstration." -ForegroundColor Yellow

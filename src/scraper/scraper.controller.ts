@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, IsNull, Not, Repository } from 'typeorm';
 import { KSK_MODELS, KskModel } from './constants';
@@ -23,11 +23,20 @@ export class ScraperController {
    */
   @Get()
   async findAll(
-    @Query('model') model?: KskModel,
-    @Query('includePending') includePending?: string,
+    @Query('model') model?: unknown,
+    @Query('includePending') includePending?: unknown,
   ): Promise<KskRecord[]> {
+    // Validated, not trusted: the query goes through TypeORM parameters either
+    // way, but an unexpected value is a caller error, not an empty result.
+    if (model !== undefined && !(KSK_MODELS as readonly unknown[]).includes(model)) {
+      throw new BadRequestException(`model must be one of ${KSK_MODELS.join(', ')}`);
+    }
+    if (includePending !== undefined && !['true', 'false', '1', '0'].includes(includePending as string)) {
+      throw new BadRequestException('includePending must be true or false');
+    }
+
     const where: FindOptionsWhere<KskRecord> = {};
-    if (model) where.model = model;
+    if (model) where.model = model as KskModel;
     if (includePending !== 'true' && includePending !== '1') {
       where.detailFetchedAt = Not(IsNull());
     }

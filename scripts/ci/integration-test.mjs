@@ -223,6 +223,39 @@ await check('Status reflects sync progress', async () => {
   return `${total} total · ${ready} ready · ${pending} pending`;
 });
 
+await check('Security headers are set', async () => {
+  const response = await fetch(`${BASE}/`);
+  const expected = {
+    'content-security-policy': "default-src 'none'",
+    'x-content-type-options': 'nosniff',
+    'x-frame-options': 'DENY',
+    'cache-control': 'no-store',
+    'strict-transport-security': 'max-age=',
+  };
+  for (const [header, value] of Object.entries(expected)) {
+    const actual = response.headers.get(header) ?? '';
+    expect(actual.includes(value), `${header} is "${actual}"`);
+  }
+  expect(!response.headers.has('x-powered-by'), 'X-Powered-By leaks the framework');
+  return 'CSP · nosniff · DENY · no-store · HSTS';
+});
+
+// Last: it spends this IP's sign-in budget for the rest of the minute.
+await check('Sign-in is rate-limited', async () => {
+  for (let attempt = 1; attempt <= 30; attempt++) {
+    const response = await fetch(`${BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `nobody-${attempt}`, password: 'not-the-password' }),
+    });
+    if (response.status === 429) {
+      expect(response.headers.has('retry-after'), '429 without Retry-After');
+      return `429 after ${attempt} attempts`;
+    }
+  }
+  throw new Error('30 sign-in attempts in a row were never throttled');
+});
+
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------

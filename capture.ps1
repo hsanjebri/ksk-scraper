@@ -179,7 +179,11 @@ foreach ($model in $Models) {
       continue
     }
 
-    $detailHtml = $d.Content
+    # Les numeros d'operateur (enregistre / repare / controle par) sont des
+    # donnees personnelles dont l'analyse n'a pas besoin : effaces avant
+    # d'enregistrer, comme le fait live-sync.ps1 avant d'envoyer.
+    $detailHtml = [regex]::Replace($d.Content,
+      '(?i)(>\s*(?:registered|reworked|quality control)\s*</font>\s*</td>\s*<td[^>]*>)\s*\d+\s*(</td>)', '$1$2')
     Set-Content -Path (Join-Path $Out "detail-$model-$no.html") -Value $detailHtml -Encoding UTF8
     $detailFound = $true
 

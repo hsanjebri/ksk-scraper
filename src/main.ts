@@ -5,11 +5,15 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { raw } from 'express';
 import { AppModule } from './app.module';
+import { applyHttpHardening } from './security/http-hardening';
 
 async function bootstrap() {
   // bodyParser: false so the limit below applies to the ONE parser that runs.
   // Registering a second json() afterwards would never see a parsed-once body.
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+
+  // Headers, rate limiting, proxy trust, CORS — before any body is read.
+  applyHttpHardening(app);
 
   // Collector route: raw bytes, not parsed JSON. Its HMAC signature covers the
   // exact bytes sent, so it is verified on the Buffer before anything reads a
@@ -21,7 +25,6 @@ async function bootstrap() {
   // Everything else is small JSON (sign-in, nothing else takes a body).
   app.useBodyParser('json', { limit: '64kb' });
 
-  app.enableCors({ origin: '*' });
   await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();
