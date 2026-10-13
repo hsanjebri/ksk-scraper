@@ -1,4 +1,9 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { readCookie } from './auth-config';
@@ -11,7 +16,8 @@ import { IS_PUBLIC } from './public.decorator';
  * development uses the bare name — with the same HttpOnly / Secure /
  * SameSite=Strict attributes. The production image sets NODE_ENV=production.
  */
-export const SESSION_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-ksk_session' : 'ksk_session';
+export const SESSION_COOKIE =
+  process.env.NODE_ENV === 'production' ? '__Host-ksk_session' : 'ksk_session';
 
 /** Request with the signed-in user attached by SessionGuard. */
 export interface AuthenticatedRequest extends Request {
@@ -42,7 +48,9 @@ export class SessionGuard implements CanActivate {
     if (isPublic) return true;
 
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const user = this.auth.verifySession(readCookie(request.headers.cookie, SESSION_COOKIE));
+    const user = this.auth.verifySession(
+      readCookie(request.headers.cookie, SESSION_COOKIE),
+    );
     if (!user) throw new UnauthorizedException();
 
     request.user = user;

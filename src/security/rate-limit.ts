@@ -22,7 +22,10 @@ export interface Decision {
 }
 
 export class FixedWindowLimiter {
-  private readonly counters = new Map<string, { count: number; resetAt: number }>();
+  private readonly counters = new Map<
+    string,
+    { count: number; resetAt: number }
+  >();
 
   constructor(private readonly maxKeys = 100_000) {}
 
@@ -63,8 +66,10 @@ export class FixedWindowLimiter {
  *  - everything else: generous; the dashboard polls every few seconds
  */
 export function bucketFor(method: string, path: string): Bucket {
-  if (method === 'POST' && path === '/auth/login') return { name: 'login', limit: 20, windowMs: 60_000 };
-  if (path.startsWith('/api/scraper/ingest')) return { name: 'ingest', limit: 600, windowMs: 60_000 };
+  if (method === 'POST' && path === '/auth/login')
+    return { name: 'login', limit: 20, windowMs: 60_000 };
+  if (path.startsWith('/api/scraper/ingest'))
+    return { name: 'ingest', limit: 600, windowMs: 60_000 };
   return { name: 'default', limit: 600, windowMs: 60_000 };
 }
 

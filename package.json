@@ -8,20 +8,20 @@
   "scripts": {
     "build": "nest build",
     "scrape:probe": "nest build && node dist/scraper/live/probe.js",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"scripts/**/*.mjs\"",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "lint": "eslint \"src/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed:captured": "nest build && node dist/scraper/tools/seed-captured.js",
     "db:clear-mock": "nest build && node dist/scraper/tools/clear-mock.js",
-    "auth:hash-password": "nest build && node dist/auth/tools/hash-password.js"
+    "auth:hash-password": "nest build && node dist/auth/tools/hash-password.js",
+    "test:integration": "node scripts/ci/integration-test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",

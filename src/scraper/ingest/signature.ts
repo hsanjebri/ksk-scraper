@@ -28,7 +28,12 @@ export type SignatureVerdict =
   | 'replayed'
   | 'bad-signature';
 
-export function computeSignature(key: string, timestamp: string, nonce: string, body: Buffer): string {
+export function computeSignature(
+  key: string,
+  timestamp: string,
+  nonce: string,
+  body: Buffer,
+): string {
   return createHmac('sha256', key)
     .update(`${timestamp}.${nonce}.`, 'utf8')
     .update(body)
@@ -92,7 +97,8 @@ export function verifySignedRequest(
   if (keys.length === 0) return 'no-key-configured';
 
   const { timestamp, nonce, signature, body } = request;
-  if (timestamp === undefined || nonce === undefined || signature === undefined) return 'missing-headers';
+  if (timestamp === undefined || nonce === undefined || signature === undefined)
+    return 'missing-headers';
   if (
     typeof timestamp !== 'string' ||
     typeof nonce !== 'string' ||
@@ -105,11 +111,15 @@ export function verifySignedRequest(
     return 'malformed-headers';
   }
 
-  if (Math.abs(nowSeconds - Number(timestamp)) > SIGNATURE_WINDOW_SECONDS) return 'outside-time-window';
+  if (Math.abs(nowSeconds - Number(timestamp)) > SIGNATURE_WINDOW_SECONDS)
+    return 'outside-time-window';
 
   const given = Buffer.from(signature.toLowerCase(), 'hex');
   const valid = keys.some((key) => {
-    const expected = Buffer.from(computeSignature(key, timestamp, nonce, body), 'hex');
+    const expected = Buffer.from(
+      computeSignature(key, timestamp, nonce, body),
+      'hex',
+    );
     return timingSafeEqual(given, expected);
   });
   if (!valid) return 'bad-signature';
@@ -118,6 +128,10 @@ export function verifySignedRequest(
   // the cache or probe which nonces have been used.
   const nonceKey = nonce.toLowerCase();
   if (nonces.has(nonceKey, nowSeconds)) return 'replayed';
-  nonces.add(nonceKey, Number(timestamp) + SIGNATURE_WINDOW_SECONDS, nowSeconds);
+  nonces.add(
+    nonceKey,
+    Number(timestamp) + SIGNATURE_WINDOW_SECONDS,
+    nowSeconds,
+  );
   return 'ok';
 }

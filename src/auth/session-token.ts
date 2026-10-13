@@ -36,7 +36,9 @@ const mac = (payload: string, secret: string) =>
   createHmac('sha256', secret).update(payload).digest('base64url');
 
 export function signToken(claims: TokenClaims, secret: string): string {
-  const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
+  const payload = Buffer.from(JSON.stringify(claims), 'utf8').toString(
+    'base64url',
+  );
   return `${payload}.${mac(payload, secret)}`;
 }
 
@@ -50,7 +52,12 @@ export function verifyToken(
   expectedType: TokenType,
   nowSeconds: number = Math.floor(Date.now() / 1000),
 ): TokenClaims | null {
-  if (typeof token !== 'string' || token.length === 0 || token.length > MAX_TOKEN_LENGTH) return null;
+  if (
+    typeof token !== 'string' ||
+    token.length === 0 ||
+    token.length > MAX_TOKEN_LENGTH
+  )
+    return null;
 
   const dot = token.indexOf('.');
   if (dot <= 0 || dot !== token.lastIndexOf('.')) return null;
@@ -59,7 +66,8 @@ export function verifyToken(
 
   const expected = Buffer.from(mac(payload, secret));
   const given = Buffer.from(signature);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
+  if (given.length !== expected.length || !timingSafeEqual(given, expected))
+    return null;
 
   let claims: unknown;
   try {

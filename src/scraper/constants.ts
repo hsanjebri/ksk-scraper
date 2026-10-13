@@ -55,16 +55,25 @@ function envNumber(name: string, fallback: number): number {
  * plant. The real list page is the full history (~700 KB per model), so the
  * mock's 15s would mean ~5 MB/min against a shared legacy PHP server.
  */
-export const FAST_SCAN_INTERVAL_MS = envNumber('FAST_SCAN_INTERVAL_MS', LIVE ? 60_000 : 15_000);
+export const FAST_SCAN_INTERVAL_MS = envNumber(
+  'FAST_SCAN_INTERVAL_MS',
+  LIVE ? 60_000 : 15_000,
+);
 
 /** How often a detail-fetch cycle starts. Cycles never overlap (see scheduler). */
-export const DETAIL_CYCLE_INTERVAL_MS = envNumber('DETAIL_CYCLE_INTERVAL_MS', LIVE ? 30_000 : 45_000);
+export const DETAIL_CYCLE_INTERVAL_MS = envNumber(
+  'DETAIL_CYCLE_INTERVAL_MS',
+  LIVE ? 30_000 : 45_000,
+);
 
 /** Politeness delay between detail requests — the relay's proven value. */
 export const DETAIL_FETCH_DELAY_MS = envNumber('DETAIL_FETCH_DELAY_MS', 150);
 
 /** Detail requests per cycle — the relay's MAX_DETAIL_FETCH_PER_CYCLE. */
-export const MAX_DETAIL_FETCH_PER_CYCLE = envNumber('MAX_DETAIL_FETCH_PER_CYCLE', 250);
+export const MAX_DETAIL_FETCH_PER_CYCLE = envNumber(
+  'MAX_DETAIL_FETCH_PER_CYCLE',
+  250,
+);
 
 /**
  * New rows are fetched in detail immediately (so they appear live) only while
@@ -77,10 +86,16 @@ export const INLINE_DETAIL_LIMIT = 10;
 export const LIVE_WATCH_WINDOW_HOURS = 96;
 
 /** How soon a live open record is re-checked for closure. */
-export const OPEN_RECHECK_MS = envNumber('OPEN_RECHECK_MS', LIVE ? 60_000 : 45_000);
+export const OPEN_RECHECK_MS = envNumber(
+  'OPEN_RECHECK_MS',
+  LIVE ? 60_000 : 45_000,
+);
 
 /** Records left open far longer than normal are re-checked rarely. */
-export const STALE_OPEN_RECHECK_MS = envNumber('STALE_OPEN_RECHECK_MS', 6 * 3_600_000);
+export const STALE_OPEN_RECHECK_MS = envNumber(
+  'STALE_OPEN_RECHECK_MS',
+  6 * 3_600_000,
+);
 
 /** A detail fetch that failed is retried after this long, not every cycle. */
 export const PENDING_RETRY_MS = envNumber('PENDING_RETRY_MS', 5 * 60_000);

@@ -17,7 +17,8 @@ const PROJECTS = [
 ];
 const LEVELS = ['critical', 'high', 'moderate', 'low'];
 const failOn = (process.env.AUDIT_FAIL_ON ?? 'none').toLowerCase();
-const blocking = failOn === 'none' ? [] : LEVELS.slice(0, LEVELS.indexOf(failOn) + 1);
+const blocking =
+  failOn === 'none' ? [] : LEVELS.slice(0, LEVELS.indexOf(failOn) + 1);
 
 function audit(dir) {
   let output;
@@ -40,13 +41,17 @@ let shouldFail = false;
 for (const project of PROJECTS) {
   const report = audit(project.dir);
   const counts = report.metadata.vulnerabilities;
-  rows.push(`| ${project.name} | ${LEVELS.map((level) => counts[level] || '·').join(' | ')} |`);
+  rows.push(
+    `| ${project.name} | ${LEVELS.map((level) => counts[level] || '·').join(' | ')} |`,
+  );
 
   for (const [pkg, vuln] of Object.entries(report.vulnerabilities ?? {})) {
     if (vuln.severity !== 'critical' && vuln.severity !== 'high') continue;
     const fix = vuln.fixAvailable ? 'fix available' : 'no fix yet';
     const kind = blocking.includes(vuln.severity) ? 'error' : 'warning';
-    console.log(`::${kind} title=${project.name}: ${vuln.severity} in ${pkg}::${pkg} (${vuln.range}) — ${fix}`);
+    console.log(
+      `::${kind} title=${project.name}: ${vuln.severity} in ${pkg}::${pkg} (${vuln.range}) — ${fix}`,
+    );
   }
   if (blocking.some((level) => counts[level] > 0)) shouldFail = true;
 }
@@ -63,5 +68,6 @@ const markdown = [
 ].join('\n');
 
 console.log(markdown);
-if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+if (process.env.GITHUB_STEP_SUMMARY)
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
 process.exit(shouldFail ? 1 : 0);

@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { NonceCache, parseKeys, verifySignedRequest } from './signature';
@@ -46,7 +52,9 @@ export class SyncSecretGuard implements CanActivate {
         );
       }
     } else {
-      this.logger.warn(`Rejected collector request from ${request.ip ?? 'unknown'}: ${verdict}.`);
+      this.logger.warn(
+        `Rejected collector request from ${request.ip ?? 'unknown'}: ${verdict}.`,
+      );
     }
     throw new UnauthorizedException();
   }

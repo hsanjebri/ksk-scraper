@@ -8,7 +8,10 @@ import { RemoteDetailRecord, RemoteListRow } from './mock/mock-data.generator';
  */
 export interface RemoteSource {
   getListPage(model: KskModel): Promise<RemoteListRow[]> | RemoteListRow[];
-  getDetailPage(no: string, model: KskModel): Promise<RemoteDetailRecord> | RemoteDetailRecord;
+  getDetailPage(
+    no: string,
+    model: KskModel,
+  ): Promise<RemoteDetailRecord> | RemoteDetailRecord;
 }
 
 export const REMOTE_SOURCE = Symbol('REMOTE_SOURCE');

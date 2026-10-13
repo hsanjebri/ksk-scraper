@@ -20,7 +20,8 @@ import { ScraperGateway } from './scraper.gateway';
 import { ScraperService } from './scraper.service';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const errorText = (err: unknown) =>
+  err instanceof Error ? err.message : String(err);
 
 /**
  * Two jobs, mirroring the relay that already runs in the plant:
@@ -85,12 +86,16 @@ export class ScraperScheduler {
     this.status.listScanned(model, pageRows.length);
     if (selection.rows.length === 0) return;
 
-    const existing = await this.existingNos(model, selection.rows.map((r) => r.no));
+    const existing = await this.existingNos(
+      model,
+      selection.rows.map((r) => r.no),
+    );
     const fresh = selection.rows.filter((row) => !existing.has(row.no));
 
     if (selection.backfill || fresh.length > INLINE_DETAIL_LIMIT) {
       await this.storeListOnly(model, fresh, selection.backfill);
-      if (selection.maxNo) await this.scraperService.markSeen(model, selection.maxNo);
+      if (selection.maxNo)
+        await this.scraperService.markSeen(model, selection.maxNo);
       return;
     }
 
@@ -100,7 +105,9 @@ export class ScraperScheduler {
         if (!existing.has(row.no)) await this.ingestLive(row);
         await this.scraperService.markSeen(model, row.no);
       } catch (err) {
-        this.logger.error(`failed to store ${model} #${row.no} — retrying next scan: ${errorText(err)}`);
+        this.logger.error(
+          `failed to store ${model} #${row.no} — retrying next scan: ${errorText(err)}`,
+        );
         break; // never skip past a failed No.
       }
     }
@@ -110,7 +117,10 @@ export class ScraperScheduler {
   private async ingestLive(row: RemoteListRow): Promise<void> {
     let detail: RemoteDetailRecord | null = null;
     try {
-      detail = await this.scraperService.fetchDetailRaw(row.no, row.model as KskModel);
+      detail = await this.scraperService.fetchDetailRaw(
+        row.no,
+        row.model as KskModel,
+      );
     } catch (err) {
       this.logger.warn(
         `detail for ${row.model} #${row.no} failed (${errorText(err)}) — stored list-only, queued for retry`,
@@ -124,16 +134,24 @@ export class ScraperScheduler {
       return;
     }
 
-    const saved = await this.recordRepo.save(this.scraperService.buildRecord(row, detail));
+    const saved = await this.recordRepo.save(
+      this.scraperService.buildRecord(row, detail),
+    );
     saved.computeDerived();
     this.gateway.emitNewRecord(saved);
   }
 
-  private async storeListOnly(model: KskModel, rows: RemoteListRow[], backfill: boolean): Promise<void> {
+  private async storeListOnly(
+    model: KskModel,
+    rows: RemoteListRow[],
+    backfill: boolean,
+  ): Promise<void> {
     if (rows.length === 0) return;
     const started = Date.now();
 
-    const records = rows.map((row) => this.scraperService.buildListOnlyRecord(row));
+    const records = rows.map((row) =>
+      this.scraperService.buildListOnlyRecord(row),
+    );
     await this.recordRepo.save(records, { chunk: 500 });
 
     this.logger.log(
@@ -143,7 +161,10 @@ export class ScraperScheduler {
   }
 
   /** Which of these No. values are already stored — one query per chunk, not per row. */
-  private async existingNos(model: KskModel, nos: string[]): Promise<Set<string>> {
+  private async existingNos(
+    model: KskModel,
+    nos: string[],
+  ): Promise<Set<string>> {
     const found = new Set<string>();
     for (let i = 0; i < nos.length; i += 500) {
       const rows = await this.recordRepo.find({
@@ -175,13 +196,18 @@ export class ScraperScheduler {
     let lastError: string | null = null;
 
     try {
-      const candidates = await this.detailQueue.pick(MAX_DETAIL_FETCH_PER_CYCLE);
+      const candidates = await this.detailQueue.pick(
+        MAX_DETAIL_FETCH_PER_CYCLE,
+      );
 
       for (const record of candidates) {
         const wasPending = record.detailFetchedAt === null;
         const hadQualityControl = record.qualityControlDate !== null;
         try {
-          const fresh = await this.scraperService.fetchDetailRaw(record.no, record.model);
+          const fresh = await this.scraperService.fetchDetailRaw(
+            record.no,
+            record.model,
+          );
           const { closedNow } = this.scraperService.applyDetail(record, fresh);
           const saved = await this.recordRepo.save(record);
           saved.computeDerived();
@@ -202,7 +228,8 @@ export class ScraperScheduler {
         } catch (err) {
           failed++;
           lastError = `${record.model} #${record.no}: ${errorText(err)}`;
-          if (failed <= 3) this.logger.warn(`detail fetch failed — ${lastError}`);
+          if (failed <= 3)
+            this.logger.warn(`detail fetch failed — ${lastError}`);
           await this.recordRepo
             .update({ id: record.id }, { detailCheckedAt: new Date() })
             .catch(() => undefined);
@@ -223,11 +250,16 @@ export class ScraperScheduler {
       this.logger.error(`detail cycle failed: ${lastError}`);
     } finally {
       this.status.detailCycle(
-        { fetched, failed, enrichedPending, closed, durationMs: Date.now() - started },
+        {
+          fetched,
+          failed,
+          enrichedPending,
+          closed,
+          durationMs: Date.now() - started,
+        },
         lastError,
       );
       this.detailRunning = false;
     }
   }
-
 }

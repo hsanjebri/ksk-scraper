@@ -11,7 +11,10 @@ import { parseListRows, parseSiteDate } from './live-http.source';
  * of the app quietly relies on — newest-first ordering above all, since
  * fastScan treats rows[0] as the newest record on the page.
  */
-const HTML = readFileSync(join(__dirname, '__fixtures__', 'real-list-sample.html'), 'utf8');
+const HTML = readFileSync(
+  join(__dirname, '__fixtures__', 'real-list-sample.html'),
+  'utf8',
+);
 
 describe('list parser at scale, against real captured HTML', () => {
   const rows = parseListRows(HTML, 'MCM');

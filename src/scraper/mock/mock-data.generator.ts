@@ -69,7 +69,10 @@ const OPERATOR_POOL = ['Team2', 'Team2', 'Team2', 'Team1', 'Team1', 'Team3'];
  * Captured values: type "connecteur", names "A126*1-B_V1", "E17/47*1-S_V".
  */
 const PARTS: { type: string; names: string[] }[] = [
-  { type: 'connecteur', names: ['A126*1-B_V1', 'E17/47*1-S_V', 'N73/3*2-B-V1', 'X18/53*5-S-V1'] },
+  {
+    type: 'connecteur',
+    names: ['A126*1-B_V1', 'E17/47*1-S_V', 'N73/3*2-B-V1', 'X18/53*5-S-V1'],
+  },
   { type: 'fil', names: ['N30/3*1-B-V4', 'E4/17*1-B-V4', 'S88/8*1-B-V2'] },
   { type: 'terminal', names: ['T12*1-B-V2', 'T44*3-S-V1'] },
   { type: 'joint', names: ['J8*1-B-V1', 'J21*2-S-V3'] },
@@ -106,7 +109,10 @@ const WEIGHTED_ERROR_CODES: { code: string; weight: number }[] = [
   { code: '170', weight: 2 },
   { code: '181', weight: 2 },
 ];
-const ERROR_WEIGHT_TOTAL = WEIGHTED_ERROR_CODES.reduce((sum, e) => sum + e.weight, 0);
+const ERROR_WEIGHT_TOTAL = WEIGHTED_ERROR_CODES.reduce(
+  (sum, e) => sum + e.weight,
+  0,
+);
 
 function weightedErrorCode(): string {
   let roll = Math.random() * ERROR_WEIGHT_TOTAL;
@@ -244,8 +250,12 @@ export function generateRandomDetailRecord(
   const registered = randomPastDate(1, maxHoursAgo);
   // Only recent records stay open — a record registered six weeks ago and
   // still "En cours" would be nonsense, and would skew lead-time badly.
-  const isOpen = (forceOpen || Math.random() < 0.35) && hoursAgo(registered) < LIVE_WINDOW_HOURS;
-  const reworked = isOpen ? null : new Date(registered.getTime() + randomInt(20, 600) * 60_000);
+  const isOpen =
+    (forceOpen || Math.random() < 0.35) &&
+    hoursAgo(registered) < LIVE_WINDOW_HOURS;
+  const reworked = isOpen
+    ? null
+    : new Date(registered.getTime() + randomInt(20, 600) * 60_000);
 
   const part = randomPart();
   const defectShift = pickRandom(SHIFT_POOL);
@@ -269,7 +279,9 @@ export function generateRandomDetailRecord(
     // quality check would have been escalated long before.
     qualityControlDate:
       reworked && !(hoursAgo(registered) < 24 && Math.random() < 0.3)
-        ? new Date(reworked.getTime() + randomInt(10, 300) * 1_000).toISOString()
+        ? new Date(
+            reworked.getTime() + randomInt(10, 300) * 1_000,
+          ).toISOString()
         : null,
     defectShift,
     // Most defects are caught on the shift that made them; the rest escape to

@@ -29,7 +29,10 @@ async function main(): Promise<void> {
   const app = await NestFactory.createApplicationContext(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
-  const records: Repository<KskRecord> = app.get(getRepositoryToken(KskRecord), { strict: false });
+  const records: Repository<KskRecord> = app.get(
+    getRepositoryToken(KskRecord),
+    { strict: false },
+  );
 
   try {
     const suspect = await records
@@ -39,21 +42,32 @@ async function main(): Promise<void> {
     const total = await records.count();
 
     if (suspect.length === 0) {
-      logger.log(`No mock-looking records found (${total} record(s) in total). Nothing to do.`);
+      logger.log(
+        `No mock-looking records found (${total} record(s) in total). Nothing to do.`,
+      );
       return;
     }
 
-    const sample = suspect.slice(0, 5).map((r) => `${r.model} #${r.no} (${r.carId})`).join(', ');
-    logger.warn(`${suspect.length} of ${total} record(s) look like mock data: ${sample}…`);
+    const sample = suspect
+      .slice(0, 5)
+      .map((r) => `${r.model} #${r.no} (${r.carId})`)
+      .join(', ');
+    logger.warn(
+      `${suspect.length} of ${total} record(s) look like mock data: ${sample}…`,
+    );
 
     if (!confirmed) {
-      logger.warn('Dry run — nothing deleted. Re-run with `-- --yes` to delete them.');
+      logger.warn(
+        'Dry run — nothing deleted. Re-run with `-- --yes` to delete them.',
+      );
       return;
     }
 
     // remove() so the cascade takes each record's error-code rows with it.
     await records.remove(suspect, { chunk: 200 });
-    logger.log(`Deleted ${suspect.length} mock record(s). ${await records.count()} record(s) remain.`);
+    logger.log(
+      `Deleted ${suspect.length} mock record(s). ${await records.count()} record(s) remain.`,
+    );
   } finally {
     await app.close();
   }

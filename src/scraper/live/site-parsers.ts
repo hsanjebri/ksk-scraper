@@ -54,13 +54,19 @@ export function decodeHtmlBytes(
   override?: string | null,
 ): { text: string; charset: string } {
   if (override) {
-    return { text: new TextDecoder(override).decode(bytes), charset: override.toLowerCase() };
+    return {
+      text: new TextDecoder(override).decode(bytes),
+      charset: override.toLowerCase(),
+    };
   }
 
   const declared = /charset\s*=\s*["']?([\w-]+)/i.exec(contentType ?? '')?.[1];
   if (declared && !/^utf-?8$/i.test(declared)) {
     try {
-      return { text: new TextDecoder(declared).decode(bytes), charset: declared.toLowerCase() };
+      return {
+        text: new TextDecoder(declared).decode(bytes),
+        charset: declared.toLowerCase(),
+      };
     } catch {
       // Unknown label — fall through to detection.
     }
@@ -73,7 +79,10 @@ export function decodeHtmlBytes(
     };
   } catch {
     // WHATWG maps "iso-8859-1" to windows-1252 anyway; it is the superset.
-    return { text: new TextDecoder('windows-1252').decode(bytes), charset: 'windows-1252' };
+    return {
+      text: new TextDecoder('windows-1252').decode(bytes),
+      charset: 'windows-1252',
+    };
   }
 }
 
@@ -205,13 +214,18 @@ export function parseDetailFields(html: string): Map<string, string[]> {
 
     const lower = text.toLowerCase();
     const label = LABELS_BY_LENGTH.find(
-      (l) => lower === l || lower.startsWith(`${l}:`) || lower.startsWith(`${l} :`),
+      (l) =>
+        lower === l || lower.startsWith(`${l}:`) || lower.startsWith(`${l} :`),
     );
 
     if (label) {
       current = label;
       if (!dict.has(label)) dict.set(label, []);
-      const remainder = text.slice(label.length).trim().replace(/^:/, '').trim();
+      const remainder = text
+        .slice(label.length)
+        .trim()
+        .replace(/^:/, '')
+        .trim();
       if (remainder) dict.get(label)!.push(remainder);
     } else if (current) {
       dict.get(current)!.push(text);
@@ -233,13 +247,22 @@ export function parseErrorCodeRows(html: string): RemoteErrorCodeRow[] {
   const rows: RemoteErrorCodeRow[] = [];
   for (const chunk of html.slice(marker).split(/<tr\b/i).slice(1)) {
     // Header cells are <th>, so only real data rows produce seven <td>s.
-    const cells = [...chunk.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map((m) =>
-      unescapeHtml(m[1].replace(STRIP_TAGS, '')).trim(),
+    const cells = [...chunk.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
+      (m) => unescapeHtml(m[1].replace(STRIP_TAGS, '')).trim(),
     );
     if (cells.length < 7 || !cells[0]) continue;
 
-    const [code, description, errorProducer, partType, partName, cavity, info] = cells;
-    rows.push({ code, description, errorProducer, partType, partName, cavity, info });
+    const [code, description, errorProducer, partType, partName, cavity, info] =
+      cells;
+    rows.push({
+      code,
+      description,
+      errorProducer,
+      partType,
+      partName,
+      cavity,
+      info,
+    });
   }
   return rows;
 }
@@ -289,22 +312,38 @@ function resolveComment(main: string, rows: RemoteErrorCodeRow[]): string {
 const iso = (date: Date | null) => (date ? date.toISOString() : null);
 
 /** Everything the detail page knows about one record. */
-export function parseDetailPage(html: string, no: string, model: KskModel): RemoteDetailRecord {
+export function parseDetailPage(
+  html: string,
+  no: string,
+  model: KskModel,
+): RemoteDetailRecord {
   const dict = parseDetailFields(html);
   const errorRows = parseErrorCodeRows(html);
   const primary = errorRows[0];
 
   const errorCode = firstValue(dict, 'error code') || primary?.code || '';
-  const description = firstValue(dict, 'description') || primary?.description || '';
+  const description =
+    firstValue(dict, 'description') || primary?.description || '';
   const partName = firstValue(dict, 'part name') || primary?.partName || '';
   const partType = firstValue(dict, 'type part') || primary?.partType || '';
-  const defectBy = firstValue(dict, 'defect by') || primary?.errorProducer || '';
+  const defectBy =
+    firstValue(dict, 'defect by') || primary?.errorProducer || '';
 
   const errorCodes: RemoteErrorCodeRow[] =
     errorRows.length > 0
       ? errorRows
       : errorCode
-        ? [{ code: errorCode, description, errorProducer: defectBy, partType, partName, cavity: '', info: '' }]
+        ? [
+            {
+              code: errorCode,
+              description,
+              errorProducer: defectBy,
+              partType,
+              partName,
+              cavity: '',
+              info: '',
+            },
+          ]
         : [];
 
   const registered = firstDate(dict, 'registered');
@@ -336,7 +375,12 @@ export function parseDetailPage(html: string, no: string, model: KskModel): Remo
 
 /** True when a detail page yielded nothing usable — worth dumping for diagnosis. */
 export function detailLooksEmpty(record: RemoteDetailRecord): boolean {
-  return !record.carId && !record.errorCode && !record.qualityGate && record.errorCodes.length === 0;
+  return (
+    !record.carId &&
+    !record.errorCode &&
+    !record.qualityGate &&
+    record.errorCodes.length === 0
+  );
 }
 
 // ==================================================================== //
@@ -350,7 +394,9 @@ export function detailLooksEmpty(record: RemoteDetailRecord): boolean {
  */
 export function parseSiteDate(raw: string): Date | null {
   if (!raw) return null;
-  const m = raw.trim().match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  const m = raw
+    .trim()
+    .match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
   if (!m) return null;
 
   const date = new Date(
@@ -366,8 +412,12 @@ export function parseSiteDate(raw: string): Date | null {
 
 export function unescapeHtml(s: string): string {
   return s
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code: string) =>
+      String.fromCharCode(Number(code)),
+    )
+    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) =>
+      String.fromCharCode(parseInt(code, 16)),
+    )
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, '<')

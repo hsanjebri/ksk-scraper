@@ -39,4 +39,5 @@ const markdown = [
 ].join('\n');
 
 console.log(markdown);
-if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+if (process.env.GITHUB_STEP_SUMMARY)
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);

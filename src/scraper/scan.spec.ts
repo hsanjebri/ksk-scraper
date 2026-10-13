@@ -10,11 +10,17 @@ import { selectNewRows } from './scan';
  * No. 2937. Any logic that trusts row positions misses records.
  */
 const MAM = parseListRows(
-  readFileSync(join(__dirname, 'live', '__fixtures__', 'real-list-MAM-head.html'), 'utf8'),
+  readFileSync(
+    join(__dirname, 'live', '__fixtures__', 'real-list-MAM-head.html'),
+    'utf8',
+  ),
   'MAM',
 );
 
-const row = (no: string, registered = '2026-09-17T10:00:00.000Z'): RemoteListRow => ({
+const row = (
+  no: string,
+  registered = '2026-09-17T10:00:00.000Z',
+): RemoteListRow => ({
   no,
   model: 'MAM',
   carId: `CAR${no}`,
@@ -86,7 +92,10 @@ describe('selectNewRows', () => {
       row('3', '2026-09-16T08:00:00.000Z'),
     ];
     const since = new Date('2026-09-09T00:00:00.000Z');
-    expect(selectNewRows(page, null, since).rows.map((r) => r.no)).toEqual(['2', '3']);
+    expect(selectNewRows(page, null, since).rows.map((r) => r.no)).toEqual([
+      '2',
+      '3',
+    ]);
     // maxNo still covers the whole page, so older rows are not re-offered later.
     expect(selectNewRows(page, null, since).maxNo).toBe('3');
   });

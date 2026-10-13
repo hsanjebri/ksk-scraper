@@ -27,4 +27,5 @@ export const DB_DRIVER: DbDriver = (process.env.DB_TYPE ?? 'sqlite')
  * exactly what happened when the entities declared `timestamptz` while
  * DB_TYPE was set to sqlite.
  */
-export const DATE_COLUMN_TYPE = DB_DRIVER === 'postgres' ? 'timestamptz' : 'datetime';
+export const DATE_COLUMN_TYPE =
+  DB_DRIVER === 'postgres' ? 'timestamptz' : 'datetime';

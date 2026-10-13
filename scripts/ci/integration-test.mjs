@@ -30,7 +30,9 @@ if (!SYNC_SECRET || !CI_USER || !CI_PASSWORD) {
 }
 
 const fixture = (name) =>
-  readFileSync(new URL(`../../src/scraper/live/__fixtures__/${name}`, import.meta.url));
+  readFileSync(
+    new URL(`../../src/scraper/live/__fixtures__/${name}`, import.meta.url),
+  );
 const LIST_PAGE = fixture('real-list-MAM-head.html');
 const DETAIL_PAGE = fixture('real-detail-MAM-2944-open.html');
 
@@ -47,7 +49,12 @@ async function check(name, fn) {
     results.push({ name, ok: true, detail, ms: performance.now() - started });
     console.log(`  ✔ ${name}${detail ? ` — ${detail}` : ''}`);
   } catch (err) {
-    results.push({ name, ok: false, detail: err.message, ms: performance.now() - started });
+    results.push({
+      name,
+      ok: false,
+      detail: err.message,
+      ms: performance.now() - started,
+    });
     console.log(`  ✘ ${name} — ${err.message}`);
   }
 }
@@ -72,7 +79,10 @@ let sessionCookie = null;
 const dashboard = (path, init = {}) =>
   fetch(`${BASE}${path}`, {
     ...init,
-    headers: { ...(sessionCookie ? { Cookie: sessionCookie } : {}), ...init.headers },
+    headers: {
+      ...(sessionCookie ? { Cookie: sessionCookie } : {}),
+      ...init.headers,
+    },
   });
 
 /** A collector request, signed the way live-sync.ps1 signs it. */
@@ -126,7 +136,10 @@ await check('Wrong password is rejected', async () => {
   const response = await dashboard('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: CI_USER, password: `${CI_PASSWORD}-wrong` }),
+    body: JSON.stringify({
+      username: CI_USER,
+      password: `${CI_PASSWORD}-wrong`,
+    }),
   });
   await expectStatus(response, 401);
 });
@@ -141,7 +154,10 @@ await check('Sign-in issues a hardened session cookie', async () => {
 
   const cookie = response.headers.getSetCookie()[0] ?? '';
   for (const flag of ['HttpOnly', 'Secure', 'SameSite=Strict']) {
-    expect(cookie.toLowerCase().includes(flag.toLowerCase()), `cookie is missing ${flag}`);
+    expect(
+      cookie.toLowerCase().includes(flag.toLowerCase()),
+      `cookie is missing ${flag}`,
+    );
   }
   sessionCookie = cookie.split(';')[0];
   return 'HttpOnly · Secure · SameSite=Strict';
@@ -152,7 +168,10 @@ await check('Signed-in dashboard reads an empty relay', async () => {
   await expectStatus(response, 200);
   const status = await response.json();
   expect(status.mode === 'relay', `mode is ${status.mode}, expected relay`);
-  expect(status.counts.total === 0, `database is not empty (${status.counts.total} records)`);
+  expect(
+    status.counts.total === 0,
+    `database is not empty (${status.counts.total} records)`,
+  );
 });
 
 await check('Unsigned collector push is rejected', async () => {
@@ -165,7 +184,11 @@ await check('Unsigned collector push is rejected', async () => {
 });
 
 await check('Push signed with the wrong key is rejected', async () => {
-  const send = signedRequest('/api/scraper/ingest', listPayload(), 'x'.repeat(64));
+  const send = signedRequest(
+    '/api/scraper/ingest',
+    listPayload(),
+    'x'.repeat(64),
+  );
   await expectStatus(await send(), 401);
 });
 
@@ -175,9 +198,15 @@ await check('Signed list page is parsed and stored', async () => {
   const response = await firstPush();
   await expectStatus(response, 201);
   const result = await response.json();
-  expect(result.rowsOnPage === 12, `parsed ${result.rowsOnPage} rows, expected 12`);
+  expect(
+    result.rowsOnPage === 12,
+    `parsed ${result.rowsOnPage} rows, expected 12`,
+  );
   expect(result.stored === 12, `stored ${result.stored} rows, expected 12`);
-  expect(result.needDetails.includes('2944'), 'record 2944 was not queued for its detail page');
+  expect(
+    result.needDetails.includes('2944'),
+    'record 2944 was not queued for its detail page',
+  );
   return `${result.rowsOnPage} rows parsed, ${result.stored} stored, ${result.pending} queued`;
 });
 
@@ -202,7 +231,10 @@ await check('Detail page completes the record', async () => {
   })();
   await expectStatus(response, 201);
   const result = await response.json();
-  expect(result.applied === 1 && result.failed === 0, `applied ${result.applied}, failed ${result.failed}`);
+  expect(
+    result.applied === 1 && result.failed === 0,
+    `applied ${result.applied}, failed ${result.failed}`,
+  );
 });
 
 await check('Completed record reaches the dashboard API', async () => {
@@ -211,14 +243,20 @@ await check('Completed record reaches the dashboard API', async () => {
   const records = await response.json();
   expect(records.length === 1, `${records.length} visible records, expected 1`);
   const [record] = records;
-  expect(record.no === '2944' && record.model === 'MAM', `unexpected record ${record.model} #${record.no}`);
+  expect(
+    record.no === '2944' && record.model === 'MAM',
+    `unexpected record ${record.model} #${record.no}`,
+  );
   return `MAM #${record.no} · car ${record.carId}`;
 });
 
 await check('Status reflects sync progress', async () => {
   const status = await (await dashboard('/records/status')).json();
   const { total, ready, pending } = status.counts;
-  expect(total === 12 && ready === 1 && pending === 11, `total ${total}, ready ${ready}, pending ${pending}`);
+  expect(
+    total === 12 && ready === 1 && pending === 11,
+    `total ${total}, ready ${ready}, pending ${pending}`,
+  );
   expect(status.agent?.name === 'ci', 'collector contact was not recorded');
   return `${total} total · ${ready} ready · ${pending} pending`;
 });
@@ -236,7 +274,10 @@ await check('Security headers are set', async () => {
     const actual = response.headers.get(header) ?? '';
     expect(actual.includes(value), `${header} is "${actual}"`);
   }
-  expect(!response.headers.has('x-powered-by'), 'X-Powered-By leaks the framework');
+  expect(
+    !response.headers.has('x-powered-by'),
+    'X-Powered-By leaks the framework',
+  );
   return 'CSP · nosniff · DENY · no-store · HSTS';
 });
 
@@ -246,7 +287,10 @@ await check('Sign-in is rate-limited', async () => {
     const response = await fetch(`${BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: `nobody-${attempt}`, password: 'not-the-password' }),
+      body: JSON.stringify({
+        username: `nobody-${attempt}`,
+        password: 'not-the-password',
+      }),
     });
     if (response.status === 429) {
       expect(response.headers.has('retry-after'), '429 without Retry-After');
@@ -261,14 +305,22 @@ await check('Sign-in is rate-limited', async () => {
 // ---------------------------------------------------------------------------
 
 const failed = results.filter((r) => !r.ok);
-console.log(`\n${results.length - failed.length}/${results.length} checks passed.`);
+console.log(
+  `\n${results.length - failed.length}/${results.length} checks passed.`,
+);
 
 if (process.env.GITHUB_STEP_SUMMARY) {
   // Backslashes first, so the escapes added for pipes are not themselves escaped.
   const escape = (text) =>
-    String(text).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+    String(text)
+      .replace(/\\/g, '\\\\')
+      .replace(/\|/g, '\\|')
+      .replace(/\r?\n/g, ' ');
   const rows = results
-    .map((r) => `| ${r.ok ? '✅' : '❌'} | ${r.name} | ${escape(r.detail)} | ${Math.round(r.ms)} ms |`)
+    .map(
+      (r) =>
+        `| ${r.ok ? '✅' : '❌'} | ${r.name} | ${escape(r.detail)} | ${Math.round(r.ms)} ms |`,
+    )
     .join('\n');
   appendFileSync(
     process.env.GITHUB_STEP_SUMMARY,

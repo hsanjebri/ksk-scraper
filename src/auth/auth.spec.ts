@@ -1,4 +1,8 @@
-import { parseDashboardUsers, readCookie, sessionSecretProblem } from './auth-config';
+import {
+  parseDashboardUsers,
+  readCookie,
+  sessionSecretProblem,
+} from './auth-config';
 import { hashPassword, isValidPasswordHash, verifyPassword } from './password';
 import { signToken, verifyToken } from './session-token';
 
@@ -12,8 +16,12 @@ describe('password hashing', () => {
   });
 
   it('verifies the right password and rejects others', async () => {
-    expect(await verifyPassword('correct horse battery staple', hash)).toBe(true);
-    expect(await verifyPassword('correct horse battery stapl', hash)).toBe(false);
+    expect(await verifyPassword('correct horse battery staple', hash)).toBe(
+      true,
+    );
+    expect(await verifyPassword('correct horse battery stapl', hash)).toBe(
+      false,
+    );
     expect(await verifyPassword('', hash)).toBe(false);
   });
 
@@ -30,33 +38,56 @@ describe('password hashing', () => {
     expect(await verifyPassword('x', 'plain-text-password')).toBe(false);
     expect(await verifyPassword('x', 'scrypt$garbage')).toBe(false);
     // A cost this high would take gigabytes per login — refused outright.
-    expect(isValidPasswordHash(hash.replace(/^scrypt\$\d+/, 'scrypt$1073741824'))).toBe(false);
-    expect(isValidPasswordHash(hash.replace(/^scrypt\$\d+/, 'scrypt$1000'))).toBe(false); // not a power of two
+    expect(
+      isValidPasswordHash(hash.replace(/^scrypt\$\d+/, 'scrypt$1073741824')),
+    ).toBe(false);
+    expect(
+      isValidPasswordHash(hash.replace(/^scrypt\$\d+/, 'scrypt$1000')),
+    ).toBe(false); // not a power of two
   });
 });
 
 describe('session tokens', () => {
-  const claims = (overrides = {}) => ({ sub: 'alice', typ: 'session' as const, iat: now(), exp: now() + 3600, ...overrides });
+  const claims = (overrides = {}) => ({
+    sub: 'alice',
+    typ: 'session' as const,
+    iat: now(),
+    exp: now() + 3600,
+    ...overrides,
+  });
 
   it('round-trips a valid token', () => {
-    expect(verifyToken(signToken(claims(), SECRET), SECRET, 'session')?.sub).toBe('alice');
+    expect(
+      verifyToken(signToken(claims(), SECRET), SECRET, 'session')?.sub,
+    ).toBe('alice');
   });
 
   it('rejects a token signed with another secret', () => {
-    expect(verifyToken(signToken(claims(), 'b'.repeat(40)), SECRET, 'session')).toBeNull();
+    expect(
+      verifyToken(signToken(claims(), 'b'.repeat(40)), SECRET, 'session'),
+    ).toBeNull();
   });
 
   it('rejects a token whose claims were edited', () => {
     const token = signToken(claims(), SECRET);
     const [payload, sig] = token.split('.');
     const forged = Buffer.from(
-      JSON.stringify({ ...JSON.parse(Buffer.from(payload, 'base64url').toString()), sub: 'admin' }),
+      JSON.stringify({
+        ...JSON.parse(Buffer.from(payload, 'base64url').toString()),
+        sub: 'admin',
+      }),
     ).toString('base64url');
     expect(verifyToken(`${forged}.${sig}`, SECRET, 'session')).toBeNull();
   });
 
   it('rejects an expired token', () => {
-    expect(verifyToken(signToken(claims({ iat: now() - 7200, exp: now() - 1 }), SECRET), SECRET, 'session')).toBeNull();
+    expect(
+      verifyToken(
+        signToken(claims({ iat: now() - 7200, exp: now() - 1 }), SECRET),
+        SECRET,
+        'session',
+      ),
+    ).toBeNull();
   });
 
   it('never accepts a socket ticket as a session, or the reverse', () => {
@@ -66,7 +97,16 @@ describe('session tokens', () => {
   });
 
   it('rejects junk without throwing', () => {
-    for (const junk of [undefined, null, 42, '', '.', 'a.b.c', 'x'.repeat(5000), 'not-a-token']) {
+    for (const junk of [
+      undefined,
+      null,
+      42,
+      '',
+      '.',
+      'a.b.c',
+      'x'.repeat(5000),
+      'not-a-token',
+    ]) {
       expect(verifyToken(junk, SECRET, 'session')).toBeNull();
     }
   });
@@ -79,7 +119,9 @@ describe('dashboard user configuration', () => {
   });
 
   it('reads several users, case-insensitively', () => {
-    const { users, problems } = parseDashboardUsers(`Alice:${hash};bob:${hash}`);
+    const { users, problems } = parseDashboardUsers(
+      `Alice:${hash};bob:${hash}`,
+    );
     expect(problems).toEqual([]);
     expect([...users.keys()]).toEqual(['alice', 'bob']);
   });

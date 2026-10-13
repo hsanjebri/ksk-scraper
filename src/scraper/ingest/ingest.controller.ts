@@ -1,9 +1,19 @@
-import { BadRequestException, Controller, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { Request } from 'express';
 import { Public } from '../../auth/public.decorator';
 import { MAX_DETAIL_FETCH_PER_CYCLE } from '../constants';
 import { IngestService } from './ingest.service';
-import { parseDetailPayload, parseFailed, parseListPayload } from './ingest.payload';
+import {
+  parseDetailPayload,
+  parseFailed,
+  parseListPayload,
+} from './ingest.payload';
 import { SyncSecretGuard } from './sync-secret.guard';
 
 /**
@@ -23,7 +33,8 @@ import { SyncSecretGuard } from './sync-secret.guard';
  * over its raw bytes (see main.ts, which gives this route a raw parser).
  */
 function parseSignedBody(body: unknown): unknown {
-  if (!Buffer.isBuffer(body)) throw new BadRequestException('Expected a JSON body');
+  if (!Buffer.isBuffer(body))
+    throw new BadRequestException('Expected a JSON body');
   try {
     return JSON.parse(body.toString('utf8'));
   } catch {
@@ -45,7 +56,11 @@ export class IngestController {
     if (parseFailed(parsed)) throw new BadRequestException(parsed.error);
 
     const result = await this.ingest.ingestList(parsed.value);
-    return { ok: true, ...result, maxDetailsPerBatch: MAX_DETAIL_FETCH_PER_CYCLE };
+    return {
+      ok: true,
+      ...result,
+      maxDetailsPerBatch: MAX_DETAIL_FETCH_PER_CYCLE,
+    };
   }
 
   @Post('details')
@@ -54,6 +69,10 @@ export class IngestController {
     if (parseFailed(parsed)) throw new BadRequestException(parsed.error);
 
     const result = await this.ingest.ingestDetails(parsed.value);
-    return { ok: true, ...result, maxDetailsPerBatch: MAX_DETAIL_FETCH_PER_CYCLE };
+    return {
+      ok: true,
+      ...result,
+      maxDetailsPerBatch: MAX_DETAIL_FETCH_PER_CYCLE,
+    };
   }
 }

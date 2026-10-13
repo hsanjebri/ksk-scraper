@@ -10,7 +10,9 @@ import { applyHttpHardening } from './security/http-hardening';
 async function bootstrap() {
   // bodyParser: false so the limit below applies to the ONE parser that runs.
   // Registering a second json() afterwards would never see a parsed-once body.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
 
   // Headers, rate limiting, proxy trust, CORS — before any body is read.
   applyHttpHardening(app);

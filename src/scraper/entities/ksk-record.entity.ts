@@ -52,7 +52,11 @@ export class KskRecord {
   @Column({ type: DATE_COLUMN_TYPE, nullable: true })
   reworked: Date | null;
 
-  @Column({ name: 'quality_control_date', type: DATE_COLUMN_TYPE, nullable: true })
+  @Column({
+    name: 'quality_control_date',
+    type: DATE_COLUMN_TYPE,
+    nullable: true,
+  })
   qualityControlDate: Date | null;
 
   @Column({ name: 'defect_shift', nullable: true })
@@ -139,12 +143,15 @@ export class KskRecord {
   @AfterLoad()
   computeDerived(): void {
     this.status = this.reworked ? 'Terminé' : 'En cours';
-    this.awaitingQualityControl = this.reworked !== null && this.qualityControlDate === null;
+    this.awaitingQualityControl =
+      this.reworked !== null && this.qualityControlDate === null;
     this.week = getIsoWeekLabel(new Date(this.registered));
     const end = this.reworked ? new Date(this.reworked) : new Date();
     this.durationMinutes = Math.max(
       0,
-      Math.round((end.getTime() - new Date(this.registered).getTime()) / 60_000),
+      Math.round(
+        (end.getTime() - new Date(this.registered).getTime()) / 60_000,
+      ),
     );
   }
 }

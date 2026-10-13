@@ -31,29 +31,41 @@ export class AuthService implements OnModuleInit {
   /** Hash checked for unknown user names, so response time does not reveal
    *  which names exist. */
   private dummyHash: string | null = null;
-  private readonly failures = new Map<string, { count: number; firstAt: number }>();
+  private readonly failures = new Map<
+    string,
+    { count: number; firstAt: number }
+  >();
 
   constructor(private readonly config: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
-    const { users, problems } = parseDashboardUsers(this.config.get<string>('DASHBOARD_USERS'));
-    for (const problem of problems) this.logger.error(`DASHBOARD_USERS: ${problem}`);
+    const { users, problems } = parseDashboardUsers(
+      this.config.get<string>('DASHBOARD_USERS'),
+    );
+    for (const problem of problems)
+      this.logger.error(`DASHBOARD_USERS: ${problem}`);
     this.users = users;
 
     const secret = this.config.get<string>('SESSION_SECRET');
     const secretProblem = sessionSecretProblem(secret);
-    if (secretProblem) this.logger.error(`${secretProblem} — dashboard sign-in is disabled.`);
+    if (secretProblem)
+      this.logger.error(`${secretProblem} — dashboard sign-in is disabled.`);
     this.secret = secretProblem ? null : (secret as string);
 
     const hours = Number(this.config.get<string>('SESSION_TTL_HOURS', '8'));
-    if (Number.isFinite(hours) && hours > 0 && hours <= 24) this.sessionSeconds = Math.round(hours * 3600);
+    if (Number.isFinite(hours) && hours > 0 && hours <= 24)
+      this.sessionSeconds = Math.round(hours * 3600);
 
     this.dummyHash = await hashPassword(`unused-${Date.now()}`);
 
     if (this.configured) {
-      this.logger.log(`Dashboard sign-in enabled for ${users.size} user(s); sessions last ${this.sessionSeconds / 3600} h.`);
+      this.logger.log(
+        `Dashboard sign-in enabled for ${users.size} user(s); sessions last ${this.sessionSeconds / 3600} h.`,
+      );
     } else if (users.size === 0) {
-      this.logger.error('No dashboard users configured (DASHBOARD_USERS) — dashboard sign-in is disabled.');
+      this.logger.error(
+        'No dashboard users configured (DASHBOARD_USERS) — dashboard sign-in is disabled.',
+      );
     }
   }
 
@@ -69,7 +81,10 @@ export class AuthService implements OnModuleInit {
 
     const hash = this.users.get(name);
     // Always run one scrypt check, known user or not.
-    const valid = await verifyPassword(password, hash ?? (this.dummyHash as string));
+    const valid = await verifyPassword(
+      password,
+      hash ?? (this.dummyHash as string),
+    );
 
     if (!hash || !valid) {
       this.recordFailure(name);
@@ -80,8 +95,16 @@ export class AuthService implements OnModuleInit {
     this.failures.delete(name);
     this.logger.log(`Dashboard sign-in: ${name}.`);
     const now = Math.floor(Date.now() / 1000);
-    const token = signToken({ sub: name, typ: 'session', iat: now, exp: now + this.sessionSeconds }, this.secret as string);
-    return { status: 'ok', user: name, token, maxAgeSeconds: this.sessionSeconds };
+    const token = signToken(
+      { sub: name, typ: 'session', iat: now, exp: now + this.sessionSeconds },
+      this.secret as string,
+    );
+    return {
+      status: 'ok',
+      user: name,
+      token,
+      maxAgeSeconds: this.sessionSeconds,
+    };
   }
 
   /** The signed-in user, or null. Also null once the user has been removed. */
@@ -91,7 +114,10 @@ export class AuthService implements OnModuleInit {
 
   issueWsTicket(user: string): string {
     const now = Math.floor(Date.now() / 1000);
-    return signToken({ sub: user, typ: 'ws', iat: now, exp: now + WS_TICKET_SECONDS }, this.secret as string);
+    return signToken(
+      { sub: user, typ: 'ws', iat: now, exp: now + WS_TICKET_SECONDS },
+      this.secret as string,
+    );
   }
 
   verifyWsTicket(ticket: unknown): string | null {

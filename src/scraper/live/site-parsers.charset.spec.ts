@@ -18,7 +18,9 @@ describe('decodeHtmlBytes', () => {
   });
 
   it('detects Latin-1 bytes with no charset declared, instead of corrupting them', () => {
-    const { text, charset } = decodeHtmlBytes(Buffer.from(LATIN1_TEXT, 'latin1'));
+    const { text, charset } = decodeHtmlBytes(
+      Buffer.from(LATIN1_TEXT, 'latin1'),
+    );
     expect(text).toBe(LATIN1_TEXT);
     expect(text).not.toContain('�');
     expect(charset).toBe('windows-1252');
@@ -33,18 +35,28 @@ describe('decodeHtmlBytes', () => {
   });
 
   it('still falls back when a server wrongly declares UTF-8 for Latin-1 bytes', () => {
-    const { text } = decodeHtmlBytes(Buffer.from(LATIN1_TEXT, 'latin1'), 'text/html; charset=utf-8');
+    const { text } = decodeHtmlBytes(
+      Buffer.from(LATIN1_TEXT, 'latin1'),
+      'text/html; charset=utf-8',
+    );
     expect(text).toBe(LATIN1_TEXT);
   });
 
   it('lets SITE_CHARSET override everything', () => {
-    const { text, charset } = decodeHtmlBytes(Buffer.from(TEXT, 'utf8'), null, 'utf-8');
+    const { text, charset } = decodeHtmlBytes(
+      Buffer.from(TEXT, 'utf8'),
+      null,
+      'utf-8',
+    );
     expect(text).toBe(TEXT);
     expect(charset).toBe('utf-8');
   });
 
   it('strips a UTF-8 byte-order mark', () => {
-    const bytes = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('<html>', 'utf8')]);
+    const bytes = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('<html>', 'utf8'),
+    ]);
     expect(decodeHtmlBytes(bytes).text).toBe('<html>');
   });
 });

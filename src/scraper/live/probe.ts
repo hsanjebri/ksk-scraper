@@ -35,7 +35,9 @@ async function main(): Promise<number> {
   const baseUrl = process.env.SITE_BASE_URL;
   heading('REWORK SCRAPER PROBE');
   console.log(`SITE_BASE_URL : ${baseUrl ?? '(not set)'}`);
-  console.log(`models        : ${KSK_MODELS.map((m) => `${m} -> ${projectFor(m)}`).join(', ')}`);
+  console.log(
+    `models        : ${KSK_MODELS.map((m) => `${m} -> ${projectFor(m)}`).join(', ')}`,
+  );
 
   if (!baseUrl) {
     console.error(
@@ -58,7 +60,9 @@ async function main(): Promise<number> {
       if (rows.length === 0) {
         ok = false;
         console.log('0 rows parsed  <-- FAIL. Raw HTML saved under debug/.');
-        console.log('Send that file and the selectors can be corrected against it.');
+        console.log(
+          'Send that file and the selectors can be corrected against it.',
+        );
         continue;
       }
 
@@ -90,9 +94,13 @@ async function main(): Promise<number> {
       }
     } catch (err) {
       ok = false;
-      console.log(`REQUEST FAILED: ${err instanceof Error ? err.message : err}`);
+      console.log(
+        `REQUEST FAILED: ${err instanceof Error ? err.message : err}`,
+      );
       if (err instanceof Error && /ENOTFOUND|EAI_AGAIN/i.test(err.message)) {
-        console.log('\nThe hostname did not resolve — you are not on the SEBN network.');
+        console.log(
+          '\nThe hostname did not resolve — you are not on the SEBN network.',
+        );
       }
     }
   }
@@ -103,20 +111,27 @@ async function main(): Promise<number> {
     try {
       const detail = await source.getDetailPage(firstNo, firstModel);
       const populated = Object.entries(detail).filter(
-        ([, v]) => v !== null && v !== '' && !(Array.isArray(v) && v.length === 0),
+        ([, v]) =>
+          v !== null && v !== '' && !(Array.isArray(v) && v.length === 0),
       );
 
       if (populated.length <= 3) {
         ok = false;
-        console.log('Almost nothing parsed  <-- FAIL. Raw HTML saved under debug/.');
-        console.log('This is the known-unverified parser — that dump is exactly what is needed.');
+        console.log(
+          'Almost nothing parsed  <-- FAIL. Raw HTML saved under debug/.',
+        );
+        console.log(
+          'This is the known-unverified parser — that dump is exactly what is needed.',
+        );
       } else {
         console.log('parsed fields:');
         for (const [key, value] of populated) {
           if (key === 'errorCodes') continue;
           console.log(`  ${key.padEnd(20)} ${String(value)}`);
         }
-        console.log(`  errorCodes           ${detail.errorCodes.length} entry(ies)`);
+        console.log(
+          `  errorCodes           ${detail.errorCodes.length} entry(ies)`,
+        );
         console.log(
           detail.reworked
             ? '\n  status -> Terminé (reworked timestamp present)'
@@ -125,11 +140,17 @@ async function main(): Promise<number> {
       }
     } catch (err) {
       ok = false;
-      console.log(`REQUEST FAILED: ${err instanceof Error ? err.message : err}`);
+      console.log(
+        `REQUEST FAILED: ${err instanceof Error ? err.message : err}`,
+      );
     }
   }
 
-  heading(ok ? 'RESULT: PASS — safe to set SCRAPER_MODE=live' : 'RESULT: FAIL — do not enable live mode yet');
+  heading(
+    ok
+      ? 'RESULT: PASS — safe to set SCRAPER_MODE=live'
+      : 'RESULT: FAIL — do not enable live mode yet',
+  );
   return ok ? 0 : 1;
 }
 

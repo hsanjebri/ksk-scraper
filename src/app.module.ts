@@ -18,7 +18,8 @@ import { ScraperModule } from './scraper/scraper.module';
         // so a fresh deployment works; set DB_SYNCHRONIZE=false once the schema
         // exists, and run the app with a role that has no DDL rights
         // (SECURITY.md, least privilege).
-        const synchronize = config.get<string>('DB_SYNCHRONIZE', 'true') !== 'false';
+        const synchronize =
+          config.get<string>('DB_SYNCHRONIZE', 'true') !== 'false';
 
         // Each branch is annotated separately: as a single inline union the
         // compiler cannot discriminate on `type` and tries to validate the
@@ -35,7 +36,13 @@ import { ScraperModule } from './scraper/scraper.module';
           const ssl = needsSsl ? { rejectUnauthorized: false } : undefined;
 
           const postgres: TypeOrmModuleOptions = url
-            ? { type: 'postgres', url, ssl, autoLoadEntities: true, synchronize }
+            ? {
+                type: 'postgres',
+                url,
+                ssl,
+                autoLoadEntities: true,
+                synchronize,
+              }
             : {
                 type: 'postgres',
                 host: config.get<string>('DB_HOST', 'localhost'),
@@ -61,8 +68,12 @@ import { ScraperModule } from './scraper/scraper.module';
         // The mode itself, not just live-or-mock: a relay run must not land in
         // the mock file, which is exactly how fake records get mixed with real
         // ones. Anything unrecognised is treated as mock, the safe default.
-        const configured = config.get<string>('SCRAPER_MODE', 'mock').toLowerCase();
-        const mode = ['live', 'relay', 'mock'].includes(configured) ? configured : 'mock';
+        const configured = config
+          .get<string>('SCRAPER_MODE', 'mock')
+          .toLowerCase();
+        const mode = ['live', 'relay', 'mock'].includes(configured)
+          ? configured
+          : 'mock';
         const sqlite: TypeOrmModuleOptions = {
           type: 'better-sqlite3',
           database: `${config.get<string>('DB_NAME', 'ksk_scraper')}-${mode}.sqlite`,

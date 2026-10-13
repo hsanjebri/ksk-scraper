@@ -49,20 +49,13 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: ESLint
-        # Correctness rules block the pipeline. Formatting is reported in the
-        # next-but-one step until the codebase has had one `npm run format` pass.
-        run: |
-          npx eslint "{src,test}/**/*.ts" --max-warnings 0 --rule 'prettier/prettier: off'
+        run: npx eslint "src/**/*.ts" --max-warnings 0
+
+      - name: Prettier
+        run: npx prettier --check "src/**/*.ts" "scripts/**/*.mjs"
 
       - name: TypeScript
         run: npx tsc --noEmit -p tsconfig.json
-
-      - name: Prettier (report only)
-        run: |
-          if ! npx prettier --check "src/**/*.ts" "test/**/*.ts" > prettier.txt 2>&1; then
-            count=$(grep -cE '^\[warn\] (src|test)/' prettier.txt || true)
-            echo "::warning title=Formatting::${count} file(s) are not Prettier-formatted — run npm run format"
-          fi
 
   # ───────────────────────────── Stage 2 · Tests ──────────────────────────────
   test:

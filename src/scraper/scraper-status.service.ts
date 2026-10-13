@@ -59,7 +59,11 @@ export class ScraperStatusService {
   }
 
   listScanned(model: string, rowsOnPage: number): void {
-    this.lists.set(model, { lastScanAt: new Date().toISOString(), rowsOnPage, lastError: null });
+    this.lists.set(model, {
+      lastScanAt: new Date().toISOString(),
+      rowsOnPage,
+      lastError: null,
+    });
   }
 
   listFailed(model: string, err: unknown): void {
@@ -71,8 +75,15 @@ export class ScraperStatusService {
     });
   }
 
-  detailCycle(result: Omit<DetailCycleStatus, 'lastCycleAt' | 'lastError'>, lastError: string | null): void {
-    this.detail = { ...result, lastCycleAt: new Date().toISOString(), lastError };
+  detailCycle(
+    result: Omit<DetailCycleStatus, 'lastCycleAt' | 'lastError'>,
+    lastError: string | null,
+  ): void {
+    this.detail = {
+      ...result,
+      lastCycleAt: new Date().toISOString(),
+      lastError,
+    };
     this.totals.fetched += result.fetched;
     this.totals.failed += result.failed;
   }
@@ -85,7 +96,11 @@ export class ScraperStatusService {
       lists: Object.fromEntries(this.lists),
       // Null unless a plant-side agent is pushing pages (relay mode).
       agent: this.agent,
-      detail: { ...this.detail, totalFetched: this.totals.fetched, totalFailed: this.totals.failed },
+      detail: {
+        ...this.detail,
+        totalFetched: this.totals.fetched,
+        totalFailed: this.totals.failed,
+      },
       environment: this.environment(),
     };
   }

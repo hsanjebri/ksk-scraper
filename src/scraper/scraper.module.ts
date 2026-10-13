@@ -45,7 +45,11 @@ import { ScraperService } from './scraper.service';
       // SCRAPER_MODE=relay          -> nothing is fetched here at all: a plant
       //                                agent pushes pages to /api/scraper/ingest.
       provide: REMOTE_SOURCE,
-      useFactory: (config: ConfigService, mock: MockRemoteSource, live: LiveHttpSource) => {
+      useFactory: (
+        config: ConfigService,
+        mock: MockRemoteSource,
+        live: LiveHttpSource,
+      ) => {
         const mode = config.get<string>('SCRAPER_MODE', 'mock');
         if (mode === 'relay') return RELAY_SOURCE;
         return mode === 'live' ? live : mock;

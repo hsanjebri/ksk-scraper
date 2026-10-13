@@ -15,15 +15,23 @@ import { hashPassword } from '../password';
 const MIN_LENGTH = 12;
 
 async function ask(question: string, hidden: boolean): Promise<string> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: process.stdin.isTTY });
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: process.stdin.isTTY,
+  });
   if (hidden && process.stdin.isTTY) {
     // Suppress echo of what is typed after the prompt.
-    const write = (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput;
-    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput = (s: string) => {
-      if (s.startsWith(question)) write.call(rl, s);
-    };
+    const write = (rl as unknown as { _writeToOutput: (s: string) => void })
+      ._writeToOutput;
+    (rl as unknown as { _writeToOutput: (s: string) => void })._writeToOutput =
+      (s: string) => {
+        if (s.startsWith(question)) write.call(rl, s);
+      };
   }
-  const answer = await new Promise<string>((resolve) => rl.question(question, resolve));
+  const answer = await new Promise<string>((resolve) =>
+    rl.question(question, resolve),
+  );
   rl.close();
   if (hidden && process.stdin.isTTY) process.stdout.write('\n');
   return answer;
@@ -39,8 +47,10 @@ async function main(): Promise<void> {
 
   const password = await ask('Password (not shown): ', true);
   const problems: string[] = [];
-  if (password.length < MIN_LENGTH) problems.push(`shorter than ${MIN_LENGTH} characters`);
-  if (password.toLowerCase().includes(user)) problems.push('contains the user name');
+  if (password.length < MIN_LENGTH)
+    problems.push(`shorter than ${MIN_LENGTH} characters`);
+  if (password.toLowerCase().includes(user))
+    problems.push('contains the user name');
   if (problems.length > 0) {
     console.error(`Refused: the password is ${problems.join(' and ')}.`);
     process.exitCode = 1;
@@ -56,7 +66,9 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\nAdd this entry to DASHBOARD_USERS on the server (separate several with ";"):\n');
+  console.log(
+    '\nAdd this entry to DASHBOARD_USERS on the server (separate several with ";"):\n',
+  );
   console.log(`${user}:${await hashPassword(password)}`);
 }
 

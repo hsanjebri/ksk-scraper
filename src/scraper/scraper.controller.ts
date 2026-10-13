@@ -28,10 +28,18 @@ export class ScraperController {
   ): Promise<KskRecord[]> {
     // Validated, not trusted: the query goes through TypeORM parameters either
     // way, but an unexpected value is a caller error, not an empty result.
-    if (model !== undefined && !(KSK_MODELS as readonly unknown[]).includes(model)) {
-      throw new BadRequestException(`model must be one of ${KSK_MODELS.join(', ')}`);
+    if (
+      model !== undefined &&
+      !(KSK_MODELS as readonly unknown[]).includes(model)
+    ) {
+      throw new BadRequestException(
+        `model must be one of ${KSK_MODELS.join(', ')}`,
+      );
     }
-    if (includePending !== undefined && !['true', 'false', '1', '0'].includes(includePending as string)) {
+    if (
+      includePending !== undefined &&
+      !['true', 'false', '1', '0'].includes(includePending as string)
+    ) {
       throw new BadRequestException('includePending must be true or false');
     }
 
@@ -41,7 +49,10 @@ export class ScraperController {
       where.detailFetchedAt = Not(IsNull());
     }
 
-    const records = await this.recordRepo.find({ where, order: { registered: 'DESC' } });
+    const records = await this.recordRepo.find({
+      where,
+      order: { registered: 'DESC' },
+    });
     records.forEach((record) => record.computeDerived());
     return records;
   }
@@ -55,18 +66,25 @@ export class ScraperController {
    */
   @Get('status')
   async getStatus() {
-    const rows: { model: string; total: string | number; pending: string | number; open: string | number }[] =
-      await this.recordRepo
-        .createQueryBuilder('r')
-        .select('r.model', 'model')
-        .addSelect('COUNT(*)', 'total')
-        .addSelect('SUM(CASE WHEN r.detailFetchedAt IS NULL THEN 1 ELSE 0 END)', 'pending')
-        .addSelect(
-          'SUM(CASE WHEN r.reworked IS NULL AND r.detailFetchedAt IS NOT NULL THEN 1 ELSE 0 END)',
-          'open',
-        )
-        .groupBy('r.model')
-        .getRawMany();
+    const rows: {
+      model: string;
+      total: string | number;
+      pending: string | number;
+      open: string | number;
+    }[] = await this.recordRepo
+      .createQueryBuilder('r')
+      .select('r.model', 'model')
+      .addSelect('COUNT(*)', 'total')
+      .addSelect(
+        'SUM(CASE WHEN r.detailFetchedAt IS NULL THEN 1 ELSE 0 END)',
+        'pending',
+      )
+      .addSelect(
+        'SUM(CASE WHEN r.reworked IS NULL AND r.detailFetchedAt IS NOT NULL THEN 1 ELSE 0 END)',
+        'open',
+      )
+      .groupBy('r.model')
+      .getRawMany();
 
     const byModel: Record<string, { total: number; pending: number }> = {};
     for (const model of KSK_MODELS) byModel[model] = { total: 0, pending: 0 };

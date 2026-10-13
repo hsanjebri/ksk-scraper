@@ -333,8 +333,8 @@ flowchart LR
 
 | Stage | What it proves |
 | --- | --- |
-| Lint & type-check | no ESLint errors, the whole API type-checks |
-| Unit tests | 138 tests on Node 22 and 24, including the site parsers against real captured HTML; coverage published on the run page |
+| Lint & type-check | no ESLint errors, Prettier-formatted, the whole API type-checks |
+| Unit tests | 145 tests on Node 22 and 24, including the site parsers against real captured HTML; coverage published on the run page |
 | Build | API and dashboard compile; dashboard bundle sizes reported |
 | Integration | the **built** server against a real PostgreSQL, driven over HTTP as both clients: dashboard sign-in and cookie flags, then the plant collector's HMAC-signed pushes — unsigned, wrong-key and replayed requests refused, the captured page parsed, stored once, and visible after its detail page arrives |
 | Docker | the image builds and boots, is scanned by Trivy (results in the Security tab), and on `main` is pushed to GHCR |
@@ -348,7 +348,7 @@ advisories.
 Run the integration suite locally against a running server:
 
 ```bash
-SYNC_SECRET=... CI_USER=... CI_PASSWORD=... node scripts/ci/integration-test.mjs
+SYNC_SECRET=... CI_USER=... CI_PASSWORD=... npm run test:integration
 ```
 
 ---

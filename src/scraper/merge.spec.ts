@@ -5,7 +5,11 @@ import {
   mergeListAndDetail,
   syncErrorCodes,
 } from './merge';
-import { RemoteDetailRecord, RemoteErrorCodeRow, RemoteListRow } from './mock/mock-data.generator';
+import {
+  RemoteDetailRecord,
+  RemoteErrorCodeRow,
+  RemoteListRow,
+} from './mock/mock-data.generator';
 
 /**
  * These pin the single most dangerous failure mode in the whole scraper.
@@ -145,7 +149,8 @@ describe('mergeListAndDetail', () => {
   // The list page clips Comment at 60 characters — measured on a real capture,
   // where 28 of 44 rows sat at exactly 60. The full text is on the detail page.
   describe('comment truncation', () => {
-    const clipped = 'pas de continuite n30/3*1-b-v4 voie21 x18/53*5-s-v1 voie4 lt'; // 60
+    const clipped =
+      'pas de continuite n30/3*1-b-v4 voie21 x18/53*5-s-v1 voie4 lt'; // 60
     const full =
       'pas de continuite n30/3*1-b-v4 voie21 x18/53*5-s-v1 voie4 ltg 2482380 remplace';
 
@@ -162,7 +167,10 @@ describe('mergeListAndDetail', () => {
     });
 
     it('keeps the list comment when the detail page has nothing', () => {
-      const merged = mergeListAndDetail({ ...LIST_ROW, comment: clipped }, EMPTY_DETAIL);
+      const merged = mergeListAndDetail(
+        { ...LIST_ROW, comment: clipped },
+        EMPTY_DETAIL,
+      );
       expect(merged.comment).toBe(clipped);
     });
 
@@ -210,7 +218,8 @@ describe('enrichWithDetail', () => {
     partName: 'A126*1-B_V1',
     description: 'incorrecte connecteur',
     qualityGate: 'EOL Electrical test',
-    comment: 'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n125*1-b-v1 v32+33',
+    comment:
+      'inversion enter deux connecteur n73/3*2-b-v1 v32+33 vers n125*1-b-v1 v32+33',
   };
 
   it('completes a list-only record and reports that it closed', () => {
@@ -250,7 +259,11 @@ describe('enrichWithDetail', () => {
 
   it('keeps an open record open and says so', () => {
     const record = listOnly();
-    const { closedNow } = enrichWithDetail(record, { ...detail, reworked: null, qualityControlDate: null });
+    const { closedNow } = enrichWithDetail(record, {
+      ...detail,
+      reworked: null,
+      qualityControlDate: null,
+    });
     expect(closedNow).toBe(false);
     expect(record.reworked).toBeNull();
     expect(record.qualityGate).toBe('EOL Electrical test');
@@ -299,10 +312,18 @@ describe('syncErrorCodes', () => {
     created = 0;
   });
 
-  const stored = (over: Partial<StoredRow> = {}): StoredRow => ({ ...row(), id: 1, ...over });
+  const stored = (over: Partial<StoredRow> = {}): StoredRow => ({
+    ...row(),
+    id: 1,
+    ...over,
+  });
 
   it('attaches the rows of a record that had none', () => {
-    const result = syncErrorCodes<StoredRow>([], [row(), row({ code: '500', cavity: '4' })], create);
+    const result = syncErrorCodes<StoredRow>(
+      [],
+      [row(), row({ code: '500', cavity: '4' })],
+      create,
+    );
     expect(result.map((r) => r.code)).toEqual(['510', '500']);
     expect(created).toBe(2);
   });
@@ -311,7 +332,14 @@ describe('syncErrorCodes', () => {
     const existing = stored();
     const result = syncErrorCodes<StoredRow>(
       [existing],
-      [row(), row({ code: '140', description: 'fil coupe', cavity: 'Not applicable' })],
+      [
+        row(),
+        row({
+          code: '140',
+          description: 'fil coupe',
+          cavity: 'Not applicable',
+        }),
+      ],
       create,
     );
 
@@ -323,7 +351,11 @@ describe('syncErrorCodes', () => {
 
   it('is idempotent — re-checking an unchanged page creates nothing', () => {
     const existing = [stored(), stored({ id: 2, code: '500', cavity: '4' })];
-    const result = syncErrorCodes<StoredRow>(existing, [row(), row({ code: '500', cavity: '4' })], create);
+    const result = syncErrorCodes<StoredRow>(
+      existing,
+      [row(), row({ code: '500', cavity: '4' })],
+      create,
+    );
     expect(result).toEqual(existing);
     expect(created).toBe(0);
   });

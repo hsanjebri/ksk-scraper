@@ -1,5 +1,9 @@
 import { Logger } from '@nestjs/common';
-import { OnGatewayInit, WebSocketGateway, WebSocketServer } from '@nestjs/websockets';
+import {
+  OnGatewayInit,
+  WebSocketGateway,
+  WebSocketServer,
+} from '@nestjs/websockets';
 import { Server } from 'socket.io';
 import { AuthService } from '../auth/auth.service';
 import { KskRecord } from './entities/ksk-record.entity';
@@ -30,10 +34,15 @@ export class ScraperGateway implements OnGatewayInit {
   afterInit(server: Server): void {
     server.use((socket, next) => {
       const origin = socket.handshake.headers.origin;
-      if (allowedOrigins.length > 0 && (!origin || !allowedOrigins.includes(origin))) {
+      if (
+        allowedOrigins.length > 0 &&
+        (!origin || !allowedOrigins.includes(origin))
+      ) {
         return next(new Error('unauthorized'));
       }
-      const ticket = (socket.handshake.auth as Record<string, unknown> | undefined)?.ticket;
+      const ticket = (
+        socket.handshake.auth as Record<string, unknown> | undefined
+      )?.ticket;
       const user = this.auth.verifyWsTicket(ticket);
       if (!user) return next(new Error('unauthorized'));
       (socket.data as Record<string, unknown>).user = user;

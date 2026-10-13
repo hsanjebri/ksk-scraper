@@ -34,11 +34,15 @@ export function parseDashboardUsers(raw: string | undefined): ParsedUsers {
     const hash = colon > 0 ? trimmed.slice(colon + 1).trim() : '';
 
     if (!USERNAME_PATTERN.test(name)) {
-      problems.push(`an entry has an invalid user name (3–64 of a-z 0-9 . _ -)`);
+      problems.push(
+        `an entry has an invalid user name (3–64 of a-z 0-9 . _ -)`,
+      );
       continue;
     }
     if (!isValidPasswordHash(hash)) {
-      problems.push(`user "${name}" does not have a valid scrypt hash — plain passwords are not accepted`);
+      problems.push(
+        `user "${name}" does not have a valid scrypt hash — plain passwords are not accepted`,
+      );
       continue;
     }
     if (users.has(name)) {
@@ -51,7 +55,9 @@ export function parseDashboardUsers(raw: string | undefined): ParsedUsers {
   return { users, problems };
 }
 
-export function sessionSecretProblem(secret: string | undefined): string | null {
+export function sessionSecretProblem(
+  secret: string | undefined,
+): string | null {
   if (!secret) return 'SESSION_SECRET is not set';
   if (secret.length < MIN_SESSION_SECRET_LENGTH) {
     return `SESSION_SECRET must be at least ${MIN_SESSION_SECRET_LENGTH} characters`;
@@ -60,7 +66,10 @@ export function sessionSecretProblem(secret: string | undefined): string | null 
 }
 
 /** Reads one cookie from a Cookie header without a parsing library. */
-export function readCookie(header: string | undefined, name: string): string | null {
+export function readCookie(
+  header: string | undefined,
+  name: string,
+): string | null {
   if (!header) return null;
   for (const part of header.split(';')) {
     const eq = part.indexOf('=');
