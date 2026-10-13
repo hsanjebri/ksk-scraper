@@ -104,6 +104,21 @@ const ROW_PATTERN =
 
 const STRIP_TAGS = /<[^>]*>/g;
 
+/**
+ * Removes markup from a cell, repeating until nothing changes: a single pass
+ * turns `<scr<b>ipt>` into `<script>`. The result is plain text — consumers
+ * still escape it for their own context (React, tooltips, CSV).
+ */
+export function stripTags(html: string): string {
+  let previous: string;
+  let current = html;
+  do {
+    previous = current;
+    current = current.replace(STRIP_TAGS, '');
+  } while (current !== previous);
+  return current;
+}
+
 export function parseListRows(html: string, model: KskModel): RemoteListRow[] {
   const rows: RemoteListRow[] = [];
   // Fresh lastIndex per call — the pattern is module-level and /g is stateful.
@@ -119,7 +134,7 @@ export function parseListRows(html: string, model: KskModel): RemoteListRow[] {
     rows.push({
       no,
       model,
-      carId: unescapeHtml(match[3].replace(STRIP_TAGS, '').trim()),
+      carId: unescapeHtml(stripTags(match[3]).trim()),
       zsb: unescapeHtml(match[4].trim()),
       // 0 of 5,939 real rows failed to parse. The fallback exists so a
       // malformed row is not silently dropped; the probe flags any row whose
@@ -248,7 +263,7 @@ export function parseErrorCodeRows(html: string): RemoteErrorCodeRow[] {
   for (const chunk of html.slice(marker).split(/<tr\b/i).slice(1)) {
     // Header cells are <th>, so only real data rows produce seven <td>s.
     const cells = [...chunk.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/gi)].map(
-      (m) => unescapeHtml(m[1].replace(STRIP_TAGS, '')).trim(),
+      (m) => unescapeHtml(stripTags(m[1])).trim(),
     );
     if (cells.length < 7 || !cells[0]) continue;
 

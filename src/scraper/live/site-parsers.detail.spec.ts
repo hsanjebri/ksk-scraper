@@ -7,6 +7,7 @@ import {
   parseDetailPage,
   parseErrorCodeRows,
   parseListRows,
+  stripTags,
 } from './site-parsers';
 
 /**
@@ -192,5 +193,21 @@ describe('list row + detail page for the same record', () => {
     expect(merged.reworked).toBe(local(2026, 9, 17, 11, 26, 59));
     expect(merged.qualityGate).toBe('EOL Electrical test');
     expect(merged.errorCodes[0].cavity).toBe('32');
+  });
+});
+
+describe('stripTags', () => {
+  it('removes markup but keeps the text', () => {
+    expect(stripTags('<font color="red">006305862C</font>')).toBe('006305862C');
+  });
+
+  it('cannot be tricked into leaving a tag behind by nesting', () => {
+    expect(stripTags('<scr<b>ipt>alert(1)</scr</b>ipt>')).not.toMatch(
+      /<\s*script/i,
+    );
+  });
+
+  it('leaves escaped text alone, for unescapeHtml to decode', () => {
+    expect(stripTags('gap &lt;5mm')).toBe('gap &lt;5mm');
   });
 });
